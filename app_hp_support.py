@@ -851,6 +851,24 @@ document.addEventListener('mouseup', function() {
             "error": str(e)
         }), 500
 
+# ★★★ 新規追加: modification.js 配信エンドポイント ★★★
+@app.route("/modification.js")
+def serve_modification_js():
+    """modification.jsを配信"""
+    try:
+        modification_js_path = os.path.join(os.path.dirname(__file__), 'modification.js')
+        if os.path.exists(modification_js_path):
+            with open(modification_js_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            logger.info("Served modification.js")
+            return Response(content, mimetype='application/javascript')
+        else:
+            logger.error(f"modification.js not found at {modification_js_path}")
+            return "modification.js not found", 404
+    except Exception as e:
+        logger.error(f"Error serving modification.js: {e}")
+        return f"Error: {e}", 500
+
 # ルート直下のアセットもプレビューとして処理(CSS未適用問題の対策)
 @app.route("/<path:filename>")
 def catch_all_assets(filename):
@@ -859,22 +877,22 @@ def catch_all_assets(filename):
     プレビューエンドポイントに転送
     """
     # 既存のAPIルートと競合しないようにチェック
-    excluded_paths = ['api', 'health', 'chat-message', 'favicon.ico']
-    
+    excluded_paths = ['api', 'health', 'chat-message', 'favicon.ico', 'modification.js']
+
     # パスの最初の部分をチェック
     first_segment = filename.split('/')[0]
     if first_segment in excluded_paths:
         return jsonify({"error": "Not found"}), 404
-    
+
     # 静的アセットの拡張子チェック
-    asset_extensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', 
+    asset_extensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico',
                        '.woff', '.woff2', '.ttf', '.json', '.webp', '.gif']
-    
+
     if any(filename.endswith(ext) for ext in asset_extensions):
         logger.info(f"Asset request redirected: /{filename} -> /preview/{filename}")
         # プレビューエンドポイントに内部転送
         return serve_preview(filename)
-    
+
     return jsonify({"error": "Not found"}), 404
 
 if __name__ == "__main__":
