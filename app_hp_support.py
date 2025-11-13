@@ -92,96 +92,127 @@ def health():
 @app.route("/preview/<path:filename>")
 def serve_preview(filename="index.html"):
     """GCSからビルド済みファイルを取得して配信(全アセット対応フォールバック付き)"""
+
+    # Content-Type判定(早期に実行)
+    content_type = 'text/html'
+    if filename.endswith('.css'):
+        content_type = 'text/css'
+    elif filename.endswith('.js'):
+        content_type = 'application/javascript'
+    elif filename.endswith('.json'):
+        content_type = 'application/json'
+    elif filename.endswith('.png'):
+        content_type = 'image/png'
+    elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+        content_type = 'image/jpeg'
+    elif filename.endswith('.svg'):
+        content_type = 'image/svg+xml'
+    elif filename.endswith('.woff') or filename.endswith('.woff2'):
+        content_type = 'font/woff2'
+    elif filename.endswith('.ttf'):
+        content_type = 'font/ttf'
+    elif filename.endswith('.ico'):
+        content_type = 'image/x-icon'
+    elif filename.endswith('.webp'):
+        content_type = 'image/webp'
+    elif filename.endswith('.gif'):
+        content_type = 'image/gif'
+
+    # GCS接続を試みる（失敗した場合は即座にフォールバック）
+    gcs_available = False
+    storage_client = None
+    bucket = None
+    blob = None
+
     try:
         storage_client = storage.Client()
         bucket = storage_client.bucket(GCS_OUTPUT_BUCKET)
         blob_path = f"{GCS_OUTPUT_PATH}/{filename}"
         blob = bucket.blob(blob_path)
-        
-        # Content-Type判定(早期に実行)
-        content_type = 'text/html'
-        if filename.endswith('.css'):
-            content_type = 'text/css'
-        elif filename.endswith('.js'):
-            content_type = 'application/javascript'
-        elif filename.endswith('.json'):
-            content_type = 'application/json'
-        elif filename.endswith('.png'):
-            content_type = 'image/png'
-        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
-            content_type = 'image/jpeg'
-        elif filename.endswith('.svg'):
-            content_type = 'image/svg+xml'
-        elif filename.endswith('.woff') or filename.endswith('.woff2'):
-            content_type = 'font/woff2'
-        elif filename.endswith('.ttf'):
-            content_type = 'font/ttf'
-        elif filename.endswith('.ico'):
-            content_type = 'image/x-icon'
-        elif filename.endswith('.webp'):
-            content_type = 'image/webp'
-        elif filename.endswith('.gif'):
-            content_type = 'image/gif'
-        
-        # GCSにファイルがない場合、DEFAULT_PREVIEW_URLからフェッチ
-        if not blob.exists():
-            logger.info(f"Preview file not found in GCS: {blob_path}, fetching from default URL")
-            
+        gcs_available = True
+
+        # GCSにファイルがある場合は取得して返す
+        if blob.exists():
             try:
-                # DEFAULT_PREVIEW_URL からフォールバック
-                # index.htmlの場合はルートURL、それ以外はパスを維持
-                if filename == "index.html":
-                    fallback_url = DEFAULT_PREVIEW_URL
-                else:
-                    fallback_url = f"{DEFAULT_PREVIEW_URL}/{filename}"
-                
-                logger.info(f"Fetching from: {fallback_url}")
-                fallback_response = requests.get(fallback_url, timeout=10, allow_redirects=True)
-                
-                if fallback_response.status_code == 200:
-                    content = fallback_response.content
-                    # レスポンスのContent-Typeを優先
-                    response_content_type = fallback_response.headers.get('Content-Type', content_type)
-                    # Content-Typeからcharset等を除去してシンプルに
-                    if ';' in response_content_type:
-                        response_content_type = response_content_type.split(';')[0].strip()
-                    
-                    # GCSにキャッシュ保存
-                    try:
-                        blob.upload_from_string(content, content_type=response_content_type)
-                        logger.info(f"? Cached to GCS: {blob_path} ({len(content)} bytes, {response_content_type})")
-                    except Exception as cache_error:
-                        logger.warning(f"Failed to cache to GCS: {cache_error}")
-                    
-                    return Response(content, mimetype=response_content_type)
-                else:
-                    logger.warning(f"Fallback URL returned {fallback_response.status_code} for {fallback_url}")
-                    return f"Preview file not found: {filename}", 404
-                    
-            except Exception as fallback_error:
-                logger.error(f"Fallback fetch failed for {filename}: {fallback_error}")
-                traceback.print_exc()
-                return f"Preview file not found: {filename}", 404
-        
-        # GCSにファイルが存在する場合
-        content = blob.download_as_bytes()
-        logger.info(f"? Served from GCS: {blob_path} ({len(content)} bytes)")
-        
-        # ★★★ 修正部分 3: index.htmlの場合、ベースURLと選択検知スクリプトを注入 ★★★
-        if filename == "index.html" and content_type == 'text/html':
-            try:
-                html_content = content.decode('utf-8')
-                
-                # <head>タグの直後に<base>タグを挿入(既にない場合のみ)
-                if '<head>' in html_content and '<base' not in html_content:
-                    html_content = html_content.replace(
-                        '<head>',
-                        '<head>\n    <base href="/preview/">'
-                    )
-                    logger.info("? Injected <base href='/preview/'> tag")
-                
-                # 選択検知スクリプトを注入(既にない場合のみ)
-                selection_script = """
+                content = blob.download_as_bytes()
+                logger.info(f"✓ Served from GCS: {blob_path} ({len(content)} bytes)")
+
+                # index.htmlの場合、ベースURLと選択検知スクリプトを注入
+                if filename == "index.html" and content_type == 'text/html':
+                    content = inject_scripts_to_html(content)
+
+                return Response(content, mimetype=content_type)
+            except Exception as download_error:
+                logger.warning(f"Failed to download from GCS: {download_error}, falling back")
+                gcs_available = False
+        else:
+            logger.info(f"Preview file not found in GCS: {blob_path}, falling back to default URL")
+
+    except Exception as gcs_error:
+        # GCS接続エラー（認証失敗、ネットワークエラーなど）
+        logger.warning(f"GCS access failed for {filename}: {gcs_error}, falling back to default URL")
+        gcs_available = False
+
+    # GCSが使えない場合、または、ファイルが見つからない場合はDEFAULT_PREVIEW_URLからフェッチ
+    try:
+        # DEFAULT_PREVIEW_URL からフォールバック
+        # index.htmlの場合はルートURL、それ以外はパスを維持
+        if filename == "index.html":
+            fallback_url = DEFAULT_PREVIEW_URL
+        else:
+            fallback_url = f"{DEFAULT_PREVIEW_URL}/{filename}"
+
+        logger.info(f"Fetching from fallback URL: {fallback_url}")
+        fallback_response = requests.get(fallback_url, timeout=10, allow_redirects=True)
+
+        if fallback_response.status_code == 200:
+            content = fallback_response.content
+            # レスポンスのContent-Typeを優先
+            response_content_type = fallback_response.headers.get('Content-Type', content_type)
+            # Content-Typeからcharset等を除去してシンプルに
+            if ';' in response_content_type:
+                response_content_type = response_content_type.split(';')[0].strip()
+
+            logger.info(f"✓ Served from fallback URL: {fallback_url} ({len(content)} bytes, {response_content_type})")
+
+            # index.htmlの場合、ベースURLと選択検知スクリプトを注入
+            if filename == "index.html" and 'text/html' in response_content_type:
+                content = inject_scripts_to_html(content)
+
+            # GCSにキャッシュ保存を試みる（失敗しても続行）
+            if gcs_available and blob is not None:
+                try:
+                    blob.upload_from_string(content, content_type=response_content_type)
+                    logger.info(f"✓ Cached to GCS: {blob_path}")
+                except Exception as cache_error:
+                    logger.warning(f"Failed to cache to GCS (non-critical): {cache_error}")
+
+            return Response(content, mimetype=response_content_type)
+        else:
+            logger.warning(f"Fallback URL returned {fallback_response.status_code} for {fallback_url}")
+            return f"Preview file not found: {filename}", 404
+
+    except Exception as fallback_error:
+        logger.error(f"Fallback fetch failed for {filename}: {fallback_error}")
+        traceback.print_exc()
+        return f"Error serving preview file: {filename}", 500
+
+
+def inject_scripts_to_html(content):
+    """HTMLコンテンツにベースURLと選択検知スクリプトを注入する"""
+    try:
+        html_content = content.decode('utf-8')
+
+        # <head>タグの直後に<base>タグを挿入(既にない場合のみ)
+        if '<head>' in html_content and '<base' not in html_content:
+            html_content = html_content.replace(
+                '<head>',
+                '<head>\n    <base href="/preview/">'
+            )
+            logger.info("✓ Injected <base href='/preview/'> tag")
+
+        # 選択検知スクリプトを注入(既にない場合のみ)
+        selection_script = """
 <script>
 // 親ウィンドウに選択情報を送信
 document.addEventListener('mouseup', function() {
@@ -192,12 +223,12 @@ document.addEventListener('mouseup', function() {
             const range = selection.getRangeAt(0);
             const container = range.commonAncestorContainer;
             const element = container.nodeType === 3 ? container.parentElement : container;
-            
+
             // セレクタを生成
             let selector = element.tagName.toLowerCase();
             if (element.id) selector += '#' + element.id;
             if (element.className) selector += '.' + element.className.split(' ').join('.');
-            
+
             window.parent.postMessage({
                 type: 'text-selected',
                 text: text,
@@ -206,33 +237,27 @@ document.addEventListener('mouseup', function() {
                 id: element.id,
                 selector: selector
             }, '*');
-            
+
             console.log('[IFRAME] Selection sent to parent:', text);
         }
     }, 10);
 });
 </script>
 """
-                
-                if '</body>' in html_content and 'text-selected' not in html_content:
-                    html_content = html_content.replace('</body>', selection_script + '</body>')
-                    logger.info("? Injected selection detection script")
-                elif '</html>' in html_content and 'text-selected' not in html_content:
-                    # </body>がない場合は</html>の前に挿入
-                    html_content = html_content.replace('</html>', selection_script + '</html>')
-                    logger.info("? Injected selection detection script (before </html>)")
-                
-                content = html_content.encode('utf-8')
-                
-            except Exception as e:
-                logger.warning(f"Failed to inject scripts: {e}")
-        
-        return Response(content, mimetype=content_type)
-        
+
+        if '</body>' in html_content and 'text-selected' not in html_content:
+            html_content = html_content.replace('</body>', selection_script + '</body>')
+            logger.info("✓ Injected selection detection script")
+        elif '</html>' in html_content and 'text-selected' not in html_content:
+            # </body>がない場合は</html>の前に挿入
+            html_content = html_content.replace('</html>', selection_script + '</html>')
+            logger.info("✓ Injected selection detection script (before </html>)")
+
+        return html_content.encode('utf-8')
+
     except Exception as e:
-        logger.error(f"Preview serve error for {filename}: {e}")
-        traceback.print_exc()
-        return f"Error serving preview file: {filename}", 500
+        logger.warning(f"Failed to inject scripts: {e}")
+        return content
 
 @app.route("/api/sessions", methods=["POST"])
 def create_session():
