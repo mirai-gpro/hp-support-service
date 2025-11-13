@@ -32,7 +32,7 @@ DEFAULT_PREVIEW_URL = os.getenv("DEFAULT_PREVIEW_URL", "https://gen-lang-client-
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
 
 class AppState:
@@ -71,7 +71,8 @@ def initialize_services():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    # index.htmlをプロジェクトルートから配信
+    return send_file("index.html")
 
 # ★★★ 修正部分 2: ヘルスチェックにTTSの状態を追加 ★★★
 @app.route("/health")
