@@ -851,6 +851,39 @@ document.addEventListener('mouseup', function() {
             "error": str(e)
         }), 500
 
+# ★★★ 新規追加: /static/ 配下のファイル配信エンドポイント ★★★
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    """staticディレクトリ配下のファイルを配信"""
+    try:
+        static_dir = os.path.join(os.path.dirname(__file__), 'static')
+        file_path = os.path.join(static_dir, filename)
+
+        if not os.path.exists(file_path):
+            logger.error(f"Static file not found: {file_path}")
+            return f"File not found: {filename}", 404
+
+        # Content-Type判定
+        content_type = 'application/octet-stream'
+        if filename.endswith('.js'):
+            content_type = 'application/javascript'
+        elif filename.endswith('.css'):
+            content_type = 'text/css'
+        elif filename.endswith('.html'):
+            content_type = 'text/html'
+        elif filename.endswith('.json'):
+            content_type = 'application/json'
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        logger.info(f"Served static file: /static/{filename}")
+        return Response(content, mimetype=content_type)
+
+    except Exception as e:
+        logger.error(f"Error serving static file {filename}: {e}")
+        return f"Error: {e}", 500
+
 # ルート直下のアセットもプレビューとして処理(CSS未適用問題の対策)
 @app.route("/<path:filename>")
 def catch_all_assets(filename):
@@ -859,22 +892,22 @@ def catch_all_assets(filename):
     プレビューエンドポイントに転送
     """
     # 既存のAPIルートと競合しないようにチェック
-    excluded_paths = ['api', 'health', 'chat-message', 'favicon.ico']
-    
+    excluded_paths = ['api', 'health', 'chat-message', 'favicon.ico', 'static']
+
     # パスの最初の部分をチェック
     first_segment = filename.split('/')[0]
     if first_segment in excluded_paths:
         return jsonify({"error": "Not found"}), 404
-    
+
     # 静的アセットの拡張子チェック
-    asset_extensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', 
+    asset_extensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico',
                        '.woff', '.woff2', '.ttf', '.json', '.webp', '.gif']
-    
+
     if any(filename.endswith(ext) for ext in asset_extensions):
         logger.info(f"Asset request redirected: /{filename} -> /preview/{filename}")
         # プレビューエンドポイントに内部転送
         return serve_preview(filename)
-    
+
     return jsonify({"error": "Not found"}), 404
 
 if __name__ == "__main__":
