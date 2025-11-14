@@ -781,54 +781,47 @@
             console.log('[sendMessage] Sending to server...');
 
             try {
-                const res = await fetch('/chat-message', {
+                const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        message: finalMessage,
+                    body: JSON.stringify({
+                        message: message,
                         session_id: currentSessionId,
                         selection: selectedElement
                     })
                 });
-                
+
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                
+
                 const data = await res.json();
-                const aiResponse = data.ai_response || 'エラー';
-                
-                // JSON形式の返答を解析して即座に適用
-                const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
-                if (jsonMatch) {
-                    try {
-                        const jsonData = JSON.parse(jsonMatch[1]);
-                        console.log('[sendMessage] Parsed JSON:', jsonData);
-                        
-                        // immediate修正の場合、即座に適用
-                        if (jsonData.action === 'immediate' && jsonData.modification) {
-                            console.log('[sendMessage] Applying modification from JSON...');
-                            window.modificationManager.applyModificationFromJSON(jsonData.modification);
-                            
-                            // responseメッセージのみ表示
-                            addMessage('ai', jsonData.response);
-                            speakTextGCP(jsonData.response);
-                        } else {
-                            // question や batch の場合は通常表示
-                            addMessage('ai', jsonData.response || aiResponse);
-                            speakTextGCP(jsonData.response || aiResponse);
-                        }
-                    } catch (parseError) {
-                        console.error('[sendMessage] JSON parse error:', parseError);
-                        addMessage('ai', aiResponse);
-                        speakTextGCP(aiResponse);
-                    }
-                } else {
-                    // JSON形式でない場合は通常の返答として表示
-                    addMessage('ai', aiResponse);
-                    speakTextGCP(aiResponse);
+                console.log('[sendMessage] Response from /api/chat:', data);
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Unknown error');
                 }
-                
+
+                // immediate修正の場合、即座に適用
+                if (data.action === 'immediate' && data.modification) {
+                    console.log('[sendMessage] Applying immediate modification:', data.modification);
+
+                    if (window.modificationManager) {
+                        const result = window.modificationManager.applyModificationFromJSON(data.modification);
+                        console.log('[sendMessage] Modification result:', result);
+                    } else {
+                        console.error('[sendMessage] modificationManager not found!');
+                    }
+
+                    // responseメッセージを表示
+                    addMessage('ai', data.response);
+                    speakTextGCP(data.response);
+                } else {
+                    // question や batch の場合は通常表示
+                    addMessage('ai', data.response);
+                    speakTextGCP(data.response);
+                }
+
                 clearSelection();
-                
+
             } catch (error) {
                 console.error('[sendMessage] Server error:', error);
                 addMessage('system', `エラー: ${error.message}`);
