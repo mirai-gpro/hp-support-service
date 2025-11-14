@@ -647,6 +647,24 @@ def chat():
         if not message:
             return jsonify({"success": False, "error": "メッセージが空です"}), 400
 
+        # Undoコマンドのチェック（Gemini API呼び出し前）
+        undo_patterns = [
+            "元に戻す", "元に戻して", "戻す", "戻して",
+            "直前の修正を元に", "前の操作を元に", "取り消す",
+            "取り消して", "undo", "UNDO", "Undo"
+        ]
+
+        is_undo_command = any(pattern in message for pattern in undo_patterns)
+
+        if is_undo_command:
+            logger.info(f"[/api/chat] Undo command detected: {message}")
+            return jsonify({
+                "success": True,
+                "action": "undo",
+                "response": "前の操作を元に戻します",
+                "modification": None
+            })
+
         # Gemini API呼び出し
         try:
             model = genai.GenerativeModel("gemini-2.0-flash-exp")

@@ -37,26 +37,29 @@ class ModificationManager {
     // ★★★ 新規追加: JSON形式の修正指示を処理 ★★★
     applyModificationFromJSON(modificationObj) {
         console.log('[ModificationManager] JSON修正指示を適用:', modificationObj);
-        
+
         const iframe = document.getElementById('hp-preview');
         if (!iframe) {
             console.error('[ModificationManager] iframeが見つかりません');
             return { success: false, message: 'プレビューが見つかりません' };
         }
-        
+
         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
         if (!iframeDoc) {
             console.error('[ModificationManager] iframe documentにアクセスできません');
             return { success: false, message: 'プレビューにアクセスできません' };
         }
-        
+
         const element = iframeDoc.querySelector(modificationObj.selector);
         if (!element) {
             console.error('[ModificationManager] 要素が見つかりません:', modificationObj.selector);
             return { success: false, message: '要素が見つかりません' };
         }
-        
+
         try {
+            // 修正前のHTMLを保存（削除前に保存が重要）
+            const originalHtml = element.outerHTML;
+
             switch(modificationObj.type) {
                 case 'text':
                     element.textContent = modificationObj.newValue;
@@ -101,22 +104,22 @@ class ModificationManager {
                     console.error('[ModificationManager] 未対応の修正タイプ:', modificationObj.type);
                     return { success: false, message: '未対応の修正タイプです' };
             }
-            
-            // 修正を記録
+
+            // 修正を記録（削除の場合はoriginalHtmlを使用）
             this.recordModification({
                 type: 'immediate',
                 userInput: modificationObj.description,
                 elementSelector: modificationObj.selector,
                 selectedText: this.selectedText,
-                originalHtml: element.outerHTML,
-                modifiedHtml: element.outerHTML,
+                originalHtml: originalHtml,
+                modifiedHtml: modificationObj.type === 'delete' ? '<!-- 削除されました -->' : element.outerHTML,
                 modificationType: modificationObj.type,
                 status: 'applied'
             });
-            
+
             console.log('[ModificationManager] JSON修正適用完了');
             return { success: true, message: '修正を適用しました' };
-            
+
         } catch (error) {
             console.error('[ModificationManager] JSON修正適用エラー:', error);
             return { success: false, message: `修正の適用に失敗: ${error.message}` };
@@ -296,6 +299,12 @@ class ModificationManager {
         const element = this.iframeElement || this.selectedElement;
         if (!element) return 'unknown';
 
+        return this.getElementSelectorFor(element);
+    }
+
+    getElementSelectorFor(element) {
+        if (!element) return 'unknown';
+
         let selector = element.tagName?.toLowerCase() || 'unknown';
 
         if (element.id) {
@@ -314,6 +323,30 @@ class ModificationManager {
         modification.id = this.generateId();
         modification.timestamp = new Date();
         modification.pageUrl = window.location.pathname;
+
+        // Undo用に親要素と位置情報を記録
+        const iframe = document.getElementById('hp-preview');
+        if (iframe && modification.elementSelector) {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            const element = iframeDoc.querySelector(modification.elementSelector);
+
+            if (element && element.parentNode) {
+                // 親要素のセレクタを記録
+                modification.parentSelector = this.getElementSelectorFor(element.parentNode);
+
+                // 次の兄弟要素を記録（削除要素を復元する際の挿入位置）
+                if (element.nextElementSibling) {
+                    modification.nextSiblingSelector = this.getElementSelectorFor(element.nextElementSibling);
+                } else {
+                    modification.nextSiblingSelector = null;
+                }
+
+                // 親内での位置も記録（フォールバック）
+                const siblings = Array.from(element.parentNode.children);
+                modification.elementIndex = siblings.indexOf(element);
+            }
+        }
+
         this.modifications.push(modification);
 
         console.log('[ModificationManager] 修正を記録:', {
@@ -433,6 +466,118 @@ class ModificationManager {
 
     generateId() {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+
+    undoLastModification() {
+        console.log('[ModificationManager] Undo開始 - 履歴件数:', this.modifications.length);
+
+        if (this.modifications.length === 0) {
+            return { success: false, message: '元に戻す操作がありません' };
+        }
+
+        const lastMod = this.modifications.pop();
+        console.log('[ModificationManager] 元に戻す修正:', {
+            type: lastMod.modificationType,
+            userInput: lastMod.userInput,
+            selector: lastMod.elementSelector
+        });
+
+        const iframe = document.getElementById('hp-preview');
+        if (!iframe) {
+            console.error('[ModificationManager] iframeが見つかりません');
+            return { success: false, message: 'プレビューが見つかりません' };
+        }
+
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        if (!iframeDoc) {
+            console.error('[ModificationManager] iframe documentにアクセスできません');
+            return { success: false, message: 'プレビューにアクセスできません' };
+        }
+
+        try {
+            if (lastMod.modificationType === 'delete') {
+                // 削除された要素を復元
+                console.log('[ModificationManager] 削除要素を復元:', lastMod.parentSelector);
+
+                const parent = iframeDoc.querySelector(lastMod.parentSelector);
+                if (!parent) {
+                    console.error('[ModificationManager] 親要素が見つかりません:', lastMod.parentSelector);
+                    this.modifications.push(lastMod); // 失敗したので履歴に戻す
+                    return { success: false, message: '親要素が見つかりません' };
+                }
+
+                // originalHtmlから要素を作成
+                const temp = iframeDoc.createElement('div');
+                temp.innerHTML = lastMod.originalHtml;
+                const restoredElement = temp.firstChild;
+
+                if (!restoredElement) {
+                    console.error('[ModificationManager] 復元する要素が作成できません');
+                    this.modifications.push(lastMod);
+                    return { success: false, message: '要素を復元できません' };
+                }
+
+                // 挿入位置を特定して復元
+                if (lastMod.nextSiblingSelector) {
+                    const nextSibling = iframeDoc.querySelector(lastMod.nextSiblingSelector);
+                    if (nextSibling) {
+                        parent.insertBefore(restoredElement, nextSibling);
+                        console.log('[ModificationManager] 次の兄弟要素の前に挿入');
+                    } else {
+                        parent.appendChild(restoredElement);
+                        console.log('[ModificationManager] 親の末尾に追加（次の兄弟が見つからない）');
+                    }
+                } else if (typeof lastMod.elementIndex !== 'undefined') {
+                    // インデックスを使って挿入
+                    const children = Array.from(parent.children);
+                    if (lastMod.elementIndex < children.length) {
+                        parent.insertBefore(restoredElement, children[lastMod.elementIndex]);
+                        console.log('[ModificationManager] インデックス', lastMod.elementIndex, 'に挿入');
+                    } else {
+                        parent.appendChild(restoredElement);
+                        console.log('[ModificationManager] 親の末尾に追加（インデックスが範囲外）');
+                    }
+                } else {
+                    parent.appendChild(restoredElement);
+                    console.log('[ModificationManager] 親の末尾に追加');
+                }
+
+                console.log('[ModificationManager] 削除要素の復元完了');
+                return { success: true, message: '削除した要素を復元しました' };
+
+            } else {
+                // その他の修正（サイズ、テキスト、色など）を元に戻す
+                console.log('[ModificationManager] 修正を元に戻す:', lastMod.elementSelector);
+
+                const element = iframeDoc.querySelector(lastMod.elementSelector);
+                if (!element) {
+                    console.error('[ModificationManager] 要素が見つかりません:', lastMod.elementSelector);
+                    this.modifications.push(lastMod);
+                    return { success: false, message: '要素が見つかりません' };
+                }
+
+                // originalHtmlから要素を復元
+                const temp = iframeDoc.createElement('div');
+                temp.innerHTML = lastMod.originalHtml;
+                const restoredElement = temp.firstChild;
+
+                if (!restoredElement) {
+                    console.error('[ModificationManager] 復元する要素が作成できません');
+                    this.modifications.push(lastMod);
+                    return { success: false, message: '要素を復元できません' };
+                }
+
+                // 既存要素を復元要素で置き換え
+                element.parentNode.replaceChild(restoredElement, element);
+                console.log('[ModificationManager] 要素の置き換え完了');
+
+                return { success: true, message: '前の修正を元に戻しました' };
+            }
+        } catch (error) {
+            console.error('[ModificationManager] Undoエラー:', error);
+            this.modifications.push(lastMod); // エラーが発生したので履歴に戻す
+            return { success: false, message: `元に戻せませんでした: ${error.message}` };
+        }
     }
 
     clearHistory() {

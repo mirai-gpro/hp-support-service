@@ -800,8 +800,28 @@
                     throw new Error(data.error || 'Unknown error');
                 }
 
+                // Undo操作の場合
+                if (data.action === 'undo') {
+                    console.log('[sendMessage] Executing undo operation');
+
+                    if (window.modificationManager) {
+                        const result = window.modificationManager.undoLastModification();
+                        console.log('[sendMessage] Undo result:', result);
+
+                        if (result.success) {
+                            addMessage('ai', result.message);
+                            speakTextGCP(result.message);
+                        } else {
+                            addMessage('ai', result.message);
+                            speakTextGCP(result.message);
+                        }
+                    } else {
+                        console.error('[sendMessage] modificationManager not found!');
+                        addMessage('system', 'エラー: 修正マネージャーが見つかりません');
+                    }
+                }
                 // immediate修正の場合、即座に適用
-                if (data.action === 'immediate' && data.modification) {
+                else if (data.action === 'immediate' && data.modification) {
                     console.log('[sendMessage] Applying immediate modification:', data.modification);
 
                     if (window.modificationManager) {
