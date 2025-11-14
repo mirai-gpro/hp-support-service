@@ -61,19 +61,19 @@ class ModificationManager {
                 case 'text':
                     element.textContent = modificationObj.newValue;
                     break;
-                    
+
                 case 'color':
                     element.style.color = modificationObj.newValue;
                     break;
-                    
+
                 case 'background':
                     element.style.backgroundColor = modificationObj.newValue;
                     break;
-                    
+
                 case 'fontSize':
                     element.style.fontSize = modificationObj.newValue;
                     break;
-                    
+
                 case 'style':
                     if (modificationObj.styles) {
                         Object.entries(modificationObj.styles).forEach(([prop, value]) => {
@@ -81,11 +81,22 @@ class ModificationManager {
                         });
                     }
                     break;
-                    
+
                 case 'attribute':
                     element.setAttribute(modificationObj.attribute, modificationObj.newValue);
                     break;
-                    
+
+                case 'delete':
+                    // 要素を削除（フェードアウトアニメーション付き）
+                    element.style.transition = 'opacity 0.3s';
+                    element.style.opacity = '0';
+                    setTimeout(() => {
+                        if (element.parentNode) {
+                            element.parentNode.removeChild(element);
+                        }
+                    }, 300);
+                    break;
+
                 default:
                     console.error('[ModificationManager] 未対応の修正タイプ:', modificationObj.type);
                     return { success: false, message: '未対応の修正タイプです' };

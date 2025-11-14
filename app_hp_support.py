@@ -640,29 +640,58 @@ def chat():
         selection = data.get("selection")
         history = data.get("history", [])
         session_id = data.get("session_id")
-        
+
         if not message:
             return jsonify({"success": False, "error": "メッセージが空です"}), 400
-        
-        # プロンプト取得
-        system_prompt = prompt_manager.get("chat_system")
-        
+
         # Gemini API呼び出し
         model = genai.GenerativeModel("gemini-2.0-flash-exp")
-        
+
+        # 明確なシステムプロンプト
+        system_prompt = """あなたはHTML修正アシスタントです。ユーザーの修正指示を分析し、以下のJSON形式で返答してください。
+
+JSON形式:
+{
+  "action": "immediate" | "question" | "batch",
+  "response": "ユーザーへの返答メッセージ",
+  "modification": {  // actionが"immediate"の場合のみ
+    "selector": "CSSセレクタ（例: h1.title, #main-content）",
+    "type": "fontSize" | "text" | "color" | "background" | "style" | "attribute",
+    "newValue": "新しい値（例: 16px, red, Hello）",
+    "description": "修正内容の説明"
+  }
+}
+
+判定基準:
+- "immediate": 簡単な修正（サイズ変更、色変更、削除など）
+- "question": 不明確な指示、追加情報が必要
+- "batch": 複雑な修正、複数箇所の変更
+
+修正タイプの使い分け:
+- "fontSize": フォントサイズ変更（newValue例: "16px", "1.2em"）
+- "text": テキスト内容変更（newValue例: "新しいテキスト"）
+- "color": 文字色変更（newValue例: "red", "#ff0000"）
+- "background": 背景色変更（newValue例: "blue", "#0000ff"）
+- "delete": 要素削除（newValueは不要）
+- "style": 複数スタイル変更（newValue不要、stylesオブジェクトを使用）
+- "attribute": 属性変更（attributeとnewValueを使用）
+
+フォントサイズ変更の計算:
+- 「20%小さく」→ 現在のサイズ × 0.8 = 12.8px（16px基準）
+- 「50%大きく」→ 現在のサイズ × 1.5 = 24px（16px基準）
+- 選択要素のデフォルトサイズを16pxと仮定して計算
+"""
+
         user_prompt = f"""
 選択情報:
 {json.dumps(selection, ensure_ascii=False, indent=2) if selection else "なし"}
-
-会話履歴:
-{json.dumps(history[-3:], ensure_ascii=False, indent=2) if history else "なし"}
 
 ユーザーメッセージ:
 {message}
 
 上記を分析し、JSON形式で返答してください。
 """
-        
+
         response = model.generate_content(
             [system_prompt, user_prompt],
             generation_config={
@@ -670,7 +699,7 @@ def chat():
                 "response_mime_type": "application/json"
             }
         )
-        
+
         # レスポンスをパース
         result = json.loads(response.text)
         
