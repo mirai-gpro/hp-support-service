@@ -851,22 +851,37 @@ document.addEventListener('mouseup', function() {
             "error": str(e)
         }), 500
 
-# ★★★ 新規追加: modification.js 配信エンドポイント ★★★
-@app.route("/modification.js")
-def serve_modification_js():
-    """modification.jsを配信"""
+# ★★★ 新規追加: /static/ 配下のファイル配信エンドポイント ★★★
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    """staticディレクトリ配下のファイルを配信"""
     try:
-        modification_js_path = os.path.join(os.path.dirname(__file__), 'modification.js')
-        if os.path.exists(modification_js_path):
-            with open(modification_js_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            logger.info("Served modification.js")
-            return Response(content, mimetype='application/javascript')
-        else:
-            logger.error(f"modification.js not found at {modification_js_path}")
-            return "modification.js not found", 404
+        static_dir = os.path.join(os.path.dirname(__file__), 'static')
+        file_path = os.path.join(static_dir, filename)
+
+        if not os.path.exists(file_path):
+            logger.error(f"Static file not found: {file_path}")
+            return f"File not found: {filename}", 404
+
+        # Content-Type判定
+        content_type = 'application/octet-stream'
+        if filename.endswith('.js'):
+            content_type = 'application/javascript'
+        elif filename.endswith('.css'):
+            content_type = 'text/css'
+        elif filename.endswith('.html'):
+            content_type = 'text/html'
+        elif filename.endswith('.json'):
+            content_type = 'application/json'
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        logger.info(f"Served static file: /static/{filename}")
+        return Response(content, mimetype=content_type)
+
     except Exception as e:
-        logger.error(f"Error serving modification.js: {e}")
+        logger.error(f"Error serving static file {filename}: {e}")
         return f"Error: {e}", 500
 
 # ルート直下のアセットもプレビューとして処理(CSS未適用問題の対策)
@@ -877,7 +892,7 @@ def catch_all_assets(filename):
     プレビューエンドポイントに転送
     """
     # 既存のAPIルートと競合しないようにチェック
-    excluded_paths = ['api', 'health', 'chat-message', 'favicon.ico', 'modification.js']
+    excluded_paths = ['api', 'health', 'chat-message', 'favicon.ico', 'static']
 
     # パスの最初の部分をチェック
     first_segment = filename.split('/')[0]
