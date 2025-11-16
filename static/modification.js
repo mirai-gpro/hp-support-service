@@ -58,20 +58,46 @@ class ModificationManager {
 
             // 全要素を検索してテキスト内容が一致する要素を見つける
             const allElements = iframeDoc.querySelectorAll('*');
-            for (const el of allElements) {
-                if (el.textContent && el.textContent.includes(textContent)) {
-                    // 子要素のテキストを含まない、直接のテキストノードを持つ要素を優先
-                    const directText = Array.from(el.childNodes)
-                        .filter(node => node.nodeType === Node.TEXT_NODE)
-                        .map(node => node.textContent.trim())
-                        .join('');
+            let bestMatch = null;
+            let bestMatchScore = -1;
 
-                    if (directText.includes(textContent) || el.textContent.trim() === textContent) {
-                        element = el;
-                        console.log('[ModificationManager] テキスト内容で要素を発見:', el.tagName, el.textContent.substring(0, 50));
-                        break;
+            for (const el of allElements) {
+                if (!el.textContent) continue;
+
+                // 直接のテキストノードを取得
+                const directText = Array.from(el.childNodes)
+                    .filter(node => node.nodeType === Node.TEXT_NODE)
+                    .map(node => node.textContent.trim())
+                    .join('');
+
+                // 完全一致を優先
+                if (el.textContent.trim() === textContent || directText === textContent) {
+                    // より小さい要素（子要素が少ない）を優先
+                    const childCount = el.children.length;
+                    const score = 1000 - childCount; // 子要素が少ないほど高スコア
+
+                    if (score > bestMatchScore) {
+                        bestMatch = el;
+                        bestMatchScore = score;
+                        console.log('[ModificationManager] 完全一致発見:', el.tagName, 'スコア:', score);
                     }
                 }
+                // 部分一致（フォールバック）
+                else if (directText.includes(textContent) && !bestMatch) {
+                    const childCount = el.children.length;
+                    const score = 100 - childCount;
+
+                    if (score > bestMatchScore) {
+                        bestMatch = el;
+                        bestMatchScore = score;
+                        console.log('[ModificationManager] 部分一致発見:', el.tagName, 'スコア:', score);
+                    }
+                }
+            }
+
+            if (bestMatch) {
+                element = bestMatch;
+                console.log('[ModificationManager] テキスト内容で要素を発見:', element.tagName, element.textContent.substring(0, 50));
             }
         } else {
             element = iframeDoc.querySelector(modificationObj.selector);
