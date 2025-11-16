@@ -65,6 +65,10 @@ class ModificationManager {
         console.log('[ModificationManager] ✅ 要素発見:', element.tagName, element.className);
         console.log('[ModificationManager] 要素の現在のテキスト:', element.textContent?.substring(0, 100));
 
+        // 修正前のHTMLを保存
+        const originalHtml = element.outerHTML;
+        console.log('[ModificationManager] 修正前のHTML保存完了');
+
         try {
             switch(modificationObj.type) {
                 case 'text':
@@ -126,19 +130,23 @@ class ModificationManager {
                     }
                     break;
 
+                case 'undo':
+                    console.log('[ModificationManager] Undo操作開始');
+                    return this.undoLastModification();
+
                 default:
                     console.error('[ModificationManager] 未対応の修正タイプ:', modificationObj.type);
                     return { success: false, message: '未対応の修正タイプです' };
             }
             
-            // 修正を記録
+            // 修正を記録（修正前と修正後のHTMLを保存）
             this.recordModification({
                 type: 'immediate',
                 userInput: modificationObj.description,
                 elementSelector: modificationObj.selector,
                 selectedText: this.selectedText,
-                originalHtml: element.outerHTML,
-                modifiedHtml: element.outerHTML,
+                originalHtml: originalHtml,  // 修正前
+                modifiedHtml: element.outerHTML,  // 修正後
                 modificationType: modificationObj.type,
                 status: 'applied'
             });
@@ -457,6 +465,76 @@ class ModificationManager {
         if (selectionInfo && selectionText) {
             selectionText.textContent = '';
             selectionInfo.classList.remove('active');
+        }
+    }
+
+    undoLastModification() {
+        console.log('[ModificationManager] Undo開始 - 履歴件数:', this.modifications.length);
+
+        if (this.modifications.length === 0) {
+            console.warn('[ModificationManager] Undo不可: 履歴なし');
+            return { success: false, message: '元に戻す履歴がありません' };
+        }
+
+        // 最後の修正を取得
+        const lastMod = this.modifications.pop();
+        console.log('[ModificationManager] 最後の修正を取得:', lastMod);
+
+        const iframe = document.getElementById('hp-preview');
+        if (!iframe) {
+            console.error('[ModificationManager] ❌ iframeが見つかりません');
+            return { success: false, message: 'プレビューが見つかりません' };
+        }
+
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        if (!iframeDoc) {
+            console.error('[ModificationManager] ❌ iframe documentにアクセスできません');
+            return { success: false, message: 'プレビューにアクセスできません' };
+        }
+
+        try {
+            const element = iframeDoc.querySelector(lastMod.elementSelector);
+
+            if (!element) {
+                console.warn('[ModificationManager] ⚠️ 要素が見つかりませんが、削除された要素の可能性があるため復元を試みます');
+
+                // 削除された要素を復元する場合
+                if (lastMod.modificationType === 'delete' && lastMod.originalHtml) {
+                    console.log('[ModificationManager] 削除要素を復元:', lastMod.originalHtml.substring(0, 100));
+
+                    // 親要素を見つけて復元
+                    const tempDiv = iframeDoc.createElement('div');
+                    tempDiv.innerHTML = lastMod.originalHtml;
+                    const restoredElement = tempDiv.firstChild;
+
+                    // body に追加（本来は元の位置に戻すべきだが、簡易実装）
+                    iframeDoc.body.appendChild(restoredElement);
+                    console.log('[ModificationManager] ✅ 削除要素の復元完了');
+
+                    return { success: true, message: '削除を元に戻しました' };
+                }
+
+                return { success: false, message: '元に戻す対象の要素が見つかりません' };
+            }
+
+            // 元のHTMLに戻す
+            if (lastMod.originalHtml) {
+                const tempDiv = iframeDoc.createElement('div');
+                tempDiv.innerHTML = lastMod.originalHtml;
+                const originalElement = tempDiv.firstChild;
+
+                if (originalElement && element.parentNode) {
+                    element.parentNode.replaceChild(originalElement, element);
+                    console.log('[ModificationManager] ✅ 要素を元のHTMLに復元');
+                }
+            }
+
+            console.log('[ModificationManager] ✅ Undo完了');
+            return { success: true, message: '変更を元に戻しました' };
+
+        } catch (error) {
+            console.error('[ModificationManager] Undoエラー:', error);
+            return { success: false, message: `元に戻す処理に失敗: ${error.message}` };
         }
     }
 
