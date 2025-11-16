@@ -668,6 +668,7 @@ def chat():
     "selector": "選択されたCSSセレクタ",
     "type": "修正タイプ",
     "newValue": "新しい値",
+    "deleteText": "削除するテキスト（deleteタイプで選択テキストがある場合のみ）",
     "description": "修正内容の説明"
   }}
 }}
@@ -687,18 +688,34 @@ def chat():
   }}
 }}
 
-**具体例2: 要素削除**
+**具体例2: 部分テキスト削除**
 入力: 「削除して」
+選択: selector="p.intro", テキスト="Instagram → (仮称)"
+出力:
+{{
+  "action": "immediate",
+  "response": "テキストを削除しました",
+  "modification": {{
+    "selector": "p.intro",
+    "type": "delete",
+    "deleteText": "Instagram → (仮称)",
+    "newValue": "",
+    "description": "選択されたテキスト部分を削除"
+  }}
+}}
+
+**具体例2-2: 要素全体削除（選択テキストがない場合）**
+入力: 「この段落を削除して」
 選択: selector="p.intro"
 出力:
 {{
   "action": "immediate",
-  "response": "要素を削除しました",
+  "response": "要素全体を削除しました",
   "modification": {{
     "selector": "p.intro",
     "type": "delete",
     "newValue": "",
-    "description": "選択された要素を削除"
+    "description": "要素全体を削除"
   }}
 }}
 
@@ -722,7 +739,9 @@ def chat():
 - text: テキスト内容変更
 - color: 文字色変更（newValue例: "red", "#ff0000"）
 - background: 背景色変更
-- delete: 要素削除（newValueは""）
+- delete: テキスト/要素削除
+  - 選択テキストがある場合: deleteTextパラメータに削除するテキストを指定（部分削除）
+  - 選択テキストがない場合: 要素全体を削除
 
 フォントサイズ計算（デフォルト16px基準）:
 - 20%小さく → 16px × 0.8 = 12.8px
@@ -731,10 +750,16 @@ def chat():
 ---
 
 選択情報:
-{json.dumps(selection, ensure_ascii=False, indent=2) if selection else "なし"}
+セレクタ: {selection.get('selector') if selection else 'なし'}
+選択テキスト: {selection.get('selectedText') or selection.get('textContent') if selection else 'なし'}
+要素タイプ: {selection.get('tagName') if selection else 'なし'}
 
 ユーザーメッセージ:
 {message}
+
+**重要**:
+- 削除指示の場合、選択テキストがあれば必ず`deleteText`パラメータに選択テキストを指定してください
+- 選択テキストがない場合のみ要素全体を削除してください
 
 上記を分析し、上記の具体例に倣ってJSON形式のみで返答してください。
 """

@@ -669,7 +669,8 @@
                         className: event.data.className,
                         id: event.data.id,
                         selector: event.data.selector,
-                        textContent: event.data.text
+                        textContent: event.data.text,
+                        selectedText: event.data.text  // Gemini用に明示的に追加
                     };
                     
                     const selectionTextEl = document.getElementById('selection-text');
