@@ -36,42 +36,62 @@ class ModificationManager {
 
     // ★★★ 新規追加: JSON形式の修正指示を処理 ★★★
     applyModificationFromJSON(modificationObj) {
-        console.log('[ModificationManager] JSON修正指示を適用:', modificationObj);
-        
+        console.log('[ModificationManager] ========== JSON修正開始 ==========');
+        console.log('[ModificationManager] selector:', modificationObj.selector);
+        console.log('[ModificationManager] type:', modificationObj.type);
+        console.log('[ModificationManager] newValue:', modificationObj.newValue);
+        console.log('[ModificationManager] deleteText:', modificationObj.deleteText);
+
         const iframe = document.getElementById('hp-preview');
         if (!iframe) {
-            console.error('[ModificationManager] iframeが見つかりません');
+            console.error('[ModificationManager] ❌ iframeが見つかりません');
             return { success: false, message: 'プレビューが見つかりません' };
         }
-        
+        console.log('[ModificationManager] ✅ iframe要素取得成功');
+
         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
         if (!iframeDoc) {
-            console.error('[ModificationManager] iframe documentにアクセスできません');
+            console.error('[ModificationManager] ❌ iframe documentにアクセスできません');
             return { success: false, message: 'プレビューにアクセスできません' };
         }
-        
+        console.log('[ModificationManager] ✅ iframe document取得成功');
+
+        console.log('[ModificationManager] セレクタで要素検索:', modificationObj.selector);
         const element = iframeDoc.querySelector(modificationObj.selector);
         if (!element) {
-            console.error('[ModificationManager] 要素が見つかりません:', modificationObj.selector);
-            return { success: false, message: '要素が見つかりません' };
+            console.error('[ModificationManager] ❌ 要素が見つかりません:', modificationObj.selector);
+            return { success: false, message: '要素が見つかりません: ' + modificationObj.selector };
         }
-        
+        console.log('[ModificationManager] ✅ 要素発見:', element.tagName, element.className);
+        console.log('[ModificationManager] 要素の現在のテキスト:', element.textContent?.substring(0, 100));
+
         try {
             switch(modificationObj.type) {
                 case 'text':
+                    console.log('[ModificationManager] テキスト変更 BEFORE:', element.textContent);
                     element.textContent = modificationObj.newValue;
+                    console.log('[ModificationManager] テキスト変更 AFTER:', element.textContent);
                     break;
 
                 case 'color':
+                    console.log('[ModificationManager] 色変更:', modificationObj.newValue);
                     element.style.color = modificationObj.newValue;
+                    console.log('[ModificationManager] ✅ 色変更完了:', element.style.color);
                     break;
 
                 case 'background':
+                    console.log('[ModificationManager] 背景色変更:', modificationObj.newValue);
                     element.style.backgroundColor = modificationObj.newValue;
+                    console.log('[ModificationManager] ✅ 背景色変更完了');
                     break;
 
                 case 'fontSize':
+                    const beforeSize = window.getComputedStyle(element).fontSize;
+                    console.log('[ModificationManager] フォントサイズ変更 BEFORE:', beforeSize);
                     element.style.fontSize = modificationObj.newValue;
+                    const afterSize = window.getComputedStyle(element).fontSize;
+                    console.log('[ModificationManager] フォントサイズ変更 AFTER:', afterSize);
+                    console.log('[ModificationManager] ✅ 変更:', beforeSize, '→', afterSize);
                     break;
 
                 case 'style':
