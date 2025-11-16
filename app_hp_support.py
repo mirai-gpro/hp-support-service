@@ -656,32 +656,73 @@ def chat():
             return jsonify({"success": False, "error": f"Model initialization error: {str(model_error)}"}), 500
 
         # プロンプト構築
-        full_prompt = f"""あなたはHTML修正アシスタントです。ユーザーの修正指示を分析し、以下のJSON形式で返答してください。
+        full_prompt = f"""あなたはHTML修正アシスタントです。ユーザーの修正指示を分析し、JSON形式で返答してください。
 
-**必ず以下のJSON形式で返答してください（マークダウンなし、JSONのみ）:**
+**重要: 必ず以下のJSON形式のみで返答してください（マークダウンコードブロック不要）**
 
+返答JSON形式:
 {{
-  "action": "immediate" | "question" | "batch",
+  "action": "immediate",
   "response": "ユーザーへの返答メッセージ",
   "modification": {{
-    "selector": "CSSセレクタ",
-    "type": "fontSize" | "text" | "color" | "background" | "delete",
+    "selector": "選択されたCSSセレクタ",
+    "type": "修正タイプ",
     "newValue": "新しい値",
     "description": "修正内容の説明"
   }}
 }}
 
-判定基準:
-- immediate: 簡単な修正（サイズ変更、色変更、削除など）
-- question: 不明確な指示、追加情報が必要
-- batch: 複雑な修正、複数箇所の変更
+**具体例1: フォントサイズ変更**
+入力: 「文字を20%小さくして」
+選択: selector="h1.title"
+出力:
+{{
+  "action": "immediate",
+  "response": "文字サイズを20%小さくしました",
+  "modification": {{
+    "selector": "h1.title",
+    "type": "fontSize",
+    "newValue": "12.8px",
+    "description": "フォントサイズを16pxから12.8pxに縮小"
+  }}
+}}
 
-修正タイプ:
-- fontSize: フォントサイズ変更（newValue例: "12.8px"）
+**具体例2: 要素削除**
+入力: 「削除して」
+選択: selector="p.intro"
+出力:
+{{
+  "action": "immediate",
+  "response": "要素を削除しました",
+  "modification": {{
+    "selector": "p.intro",
+    "type": "delete",
+    "newValue": "",
+    "description": "選択された要素を削除"
+  }}
+}}
+
+**具体例3: テキスト変更**
+入力: 「健康保険組合に修正して」
+選択: selector="span.org-name", テキスト="さくら労働組合"
+出力:
+{{
+  "action": "immediate",
+  "response": "テキストを修正しました",
+  "modification": {{
+    "selector": "span.org-name",
+    "type": "text",
+    "newValue": "健康保険組合",
+    "description": "テキストを「さくら労働組合」から「健康保険組合」に変更"
+  }}
+}}
+
+修正タイプ一覧:
+- fontSize: フォントサイズ変更（newValue例: "12.8px", "24px"）
 - text: テキスト内容変更
-- color: 文字色変更
+- color: 文字色変更（newValue例: "red", "#ff0000"）
 - background: 背景色変更
-- delete: 要素削除（newValueは空文字列""）
+- delete: 要素削除（newValueは""）
 
 フォントサイズ計算（デフォルト16px基準）:
 - 20%小さく → 16px × 0.8 = 12.8px
@@ -695,7 +736,7 @@ def chat():
 ユーザーメッセージ:
 {message}
 
-上記を分析し、JSON形式のみで返答してください（```json``` などのマークダウンは使わないでください）。
+上記を分析し、上記の具体例に倣ってJSON形式のみで返答してください。
 """
 
         try:
