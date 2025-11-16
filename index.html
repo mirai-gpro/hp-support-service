@@ -669,7 +669,8 @@
                         className: event.data.className,
                         id: event.data.id,
                         selector: event.data.selector,
-                        textContent: event.data.text
+                        textContent: event.data.text,
+                        selectedText: event.data.text  // Gemini用に明示的に追加
                     };
                     
                     const selectionTextEl = document.getElementById('selection-text');
@@ -795,6 +796,9 @@
 
                 const data = await res.json();
                 console.log('[sendMessage] Response from /api/chat:', data);
+                console.log('[sendMessage] data.action:', data.action);
+                console.log('[sendMessage] data.modification:', data.modification);
+                console.log('[sendMessage] data.response:', data.response);
 
                 if (!data.success) {
                     throw new Error(data.error || 'Unknown error');
@@ -802,6 +806,7 @@
 
                 // immediate修正の場合、即座に適用
                 if (data.action === 'immediate' && data.modification) {
+                    console.log('[sendMessage] ✅ Action is immediate, applying modification...');
                     console.log('[sendMessage] Applying immediate modification:', data.modification);
 
                     if (window.modificationManager) {
@@ -816,6 +821,8 @@
                     speakTextGCP(data.response);
                 } else {
                     // question や batch の場合は通常表示
+                    console.log('[sendMessage] ⚠️ Action is NOT immediate:', data.action);
+                    console.log('[sendMessage] Modification will not be applied');
                     addMessage('ai', data.response);
                     speakTextGCP(data.response);
                 }

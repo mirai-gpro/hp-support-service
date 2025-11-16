@@ -87,14 +87,23 @@ class ModificationManager {
                     break;
 
                 case 'delete':
-                    // 要素を削除（フェードアウトアニメーション付き）
-                    element.style.transition = 'opacity 0.3s';
-                    element.style.opacity = '0';
-                    setTimeout(() => {
-                        if (element.parentNode) {
-                            element.parentNode.removeChild(element);
-                        }
-                    }, 300);
+                    // deleteTextが指定されている場合は、テキストの一部のみ削除
+                    if (modificationObj.deleteText) {
+                        const currentText = element.textContent;
+                        const newText = currentText.replace(modificationObj.deleteText, '');
+                        element.textContent = newText.trim();
+                        console.log('[ModificationManager] テキスト部分削除:', modificationObj.deleteText);
+                    } else {
+                        // 要素全体を削除（フェードアウトアニメーション付き）
+                        element.style.transition = 'opacity 0.3s';
+                        element.style.opacity = '0';
+                        setTimeout(() => {
+                            if (element.parentNode) {
+                                element.parentNode.removeChild(element);
+                            }
+                        }, 300);
+                        console.log('[ModificationManager] 要素全体削除');
+                    }
                     break;
 
                 default:
