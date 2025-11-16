@@ -673,6 +673,13 @@ def chat():
             logger.error(f"[/api/chat] Gemini model initialization error: {model_error}")
             return jsonify({"success": False, "error": f"Model initialization error: {str(model_error)}"}), 500
 
+        # 選択情報からセレクタを生成
+        selector_override = None
+        if selection and selection.get('textContent'):
+            # クラスやIDがない場合、textContentを使った検索用の特殊セレクタを生成
+            if not selection.get('className') and not selection.get('id'):
+                selector_override = f"__TEXT_CONTENT__{selection['textContent'][:50]}__"
+
         # プロンプト構築
         full_prompt = f"""あなたはHTML修正アシスタントです。ユーザーの修正指示を分析し、以下のJSON形式で返答してください。
 
@@ -682,7 +689,7 @@ def chat():
   "action": "immediate" | "question" | "batch",
   "response": "ユーザーへの返答メッセージ",
   "modification": {{
-    "selector": "CSSセレクタ",
+    "selector": "CSSセレクタまたは特殊セレクタ",
     "type": "fontSize" | "text" | "color" | "background" | "delete",
     "newValue": "新しい値",
     "description": "修正内容の説明"
@@ -704,6 +711,11 @@ def chat():
 フォントサイズ計算（デフォルト16px基準）:
 - 20%小さく → 16px × 0.8 = 12.8px
 - 50%大きく → 16px × 1.5 = 24px
+
+**重要**: 選択情報にclassNameやidがない場合、selectorには以下の形式を使用してください:
+"__TEXT_CONTENT__選択されたテキスト__"
+
+例: {{"selector": "__TEXT_CONTENT__Instagram → (仮称)__", "type": "delete", ...}}
 
 ---
 

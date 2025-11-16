@@ -50,7 +50,33 @@ class ModificationManager {
             return { success: false, message: 'プレビューにアクセスできません' };
         }
 
-        const element = iframeDoc.querySelector(modificationObj.selector);
+        // セレクタが特殊形式（テキスト内容検索）の場合
+        let element;
+        if (modificationObj.selector.startsWith('__TEXT_CONTENT__')) {
+            const textContent = modificationObj.selector.replace(/^__TEXT_CONTENT__/, '').replace(/__$/, '');
+            console.log('[ModificationManager] テキスト内容で検索:', textContent);
+
+            // 全要素を検索してテキスト内容が一致する要素を見つける
+            const allElements = iframeDoc.querySelectorAll('*');
+            for (const el of allElements) {
+                if (el.textContent && el.textContent.includes(textContent)) {
+                    // 子要素のテキストを含まない、直接のテキストノードを持つ要素を優先
+                    const directText = Array.from(el.childNodes)
+                        .filter(node => node.nodeType === Node.TEXT_NODE)
+                        .map(node => node.textContent.trim())
+                        .join('');
+
+                    if (directText.includes(textContent) || el.textContent.trim() === textContent) {
+                        element = el;
+                        console.log('[ModificationManager] テキスト内容で要素を発見:', el.tagName, el.textContent.substring(0, 50));
+                        break;
+                    }
+                }
+            }
+        } else {
+            element = iframeDoc.querySelector(modificationObj.selector);
+        }
+
         if (!element) {
             console.error('[ModificationManager] 要素が見つかりません:', modificationObj.selector);
             return { success: false, message: '要素が見つかりません' };
@@ -105,12 +131,15 @@ class ModificationManager {
                     return { success: false, message: '未対応の修正タイプです' };
             }
 
+            // 実際に見つかった要素の正確なセレクタを生成
+            const actualSelector = this.getElementSelectorFor(element);
+
             // 修正を記録（削除の場合はoriginalHtmlを使用）
             this.recordModification({
                 type: 'immediate',
                 userInput: modificationObj.description,
-                elementSelector: modificationObj.selector,
-                selectedText: this.selectedText,
+                elementSelector: actualSelector,
+                selectedText: this.selectedText || element.textContent?.substring(0, 100),
                 originalHtml: originalHtml,
                 modifiedHtml: modificationObj.type === 'delete' ? '<!-- 削除されました -->' : element.outerHTML,
                 modificationType: modificationObj.type,
