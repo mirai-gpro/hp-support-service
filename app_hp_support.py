@@ -734,6 +734,21 @@ def chat():
   }}
 }}
 
+**具体例4: 元に戻す（undo）**
+入力: 「元に戻して」または「直前の修正を元に戻して」
+選択: なし
+出力:
+{{
+  "action": "immediate",
+  "response": "直前の変更を元に戻しました",
+  "modification": {{
+    "selector": "",
+    "type": "undo",
+    "newValue": "",
+    "description": "直前の修正を元に戻す"
+  }}
+}}
+
 修正タイプ一覧:
 - fontSize: フォントサイズ変更（newValue例: "12.8px", "24px"）
 - text: テキスト内容変更
@@ -742,6 +757,7 @@ def chat():
 - delete: テキスト/要素削除
   - 選択テキストがある場合: deleteTextパラメータに削除するテキストを指定（部分削除）
   - 選択テキストがない場合: 要素全体を削除
+- undo: 直前の修正を元に戻す（newValueは""、selectorは不要）
 
 フォントサイズ計算（デフォルト16px基準）:
 - 20%小さく → 16px × 0.8 = 12.8px
