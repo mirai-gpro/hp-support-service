@@ -68,29 +68,35 @@ class ModificationManager {
                 const directText = Array.from(el.childNodes)
                     .filter(node => node.nodeType === Node.TEXT_NODE)
                     .map(node => node.textContent.trim())
-                    .join('');
+                    .join(' ');
 
-                // 完全一致を優先
-                if (el.textContent.trim() === textContent || directText === textContent) {
-                    // より小さい要素（子要素が少ない）を優先
+                const trimmedDirectText = directText.trim();
+                const trimmedElText = el.textContent.trim();
+
+                // 完全一致を最優先（直接テキストまたは全体テキスト）
+                if (trimmedDirectText === textContent || trimmedElText === textContent) {
                     const childCount = el.children.length;
                     const score = 1000 - childCount; // 子要素が少ないほど高スコア
 
                     if (score > bestMatchScore) {
                         bestMatch = el;
                         bestMatchScore = score;
-                        console.log('[ModificationManager] 完全一致発見:', el.tagName, 'スコア:', score);
+                        console.log('[ModificationManager] 完全一致発見:', el.tagName, 'directText:', trimmedDirectText.substring(0, 30), 'スコア:', score);
                     }
                 }
-                // 部分一致（フォールバック）
-                else if (directText.includes(textContent) && !bestMatch) {
-                    const childCount = el.children.length;
-                    const score = 100 - childCount;
+                // 完全一致が見つからない場合のみ部分一致を検討
+                else if (bestMatchScore < 1000) {
+                    // 直接テキストに選択テキストが含まれる場合
+                    if (trimmedDirectText.includes(textContent)) {
+                        const childCount = el.children.length;
+                        // 部分一致のスコアは常に完全一致より低い
+                        const score = 100 - childCount;
 
-                    if (score > bestMatchScore) {
-                        bestMatch = el;
-                        bestMatchScore = score;
-                        console.log('[ModificationManager] 部分一致発見:', el.tagName, 'スコア:', score);
+                        if (score > bestMatchScore) {
+                            bestMatch = el;
+                            bestMatchScore = score;
+                            console.log('[ModificationManager] 部分一致発見:', el.tagName, 'directText:', trimmedDirectText.substring(0, 30), 'スコア:', score);
+                        }
                     }
                 }
             }
