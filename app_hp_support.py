@@ -221,8 +221,36 @@ document.addEventListener('mouseup', function() {
         const text = selection.toString().trim();
         if (text && text.length > 0) {
             const range = selection.getRangeAt(0);
-            const container = range.commonAncestorContainer;
-            const element = container.nodeType === 3 ? container.parentElement : container;
+
+            // 選択範囲の最も具体的な要素を特定
+            let element;
+            const startContainer = range.startContainer;
+            const endContainer = range.endContainer;
+
+            // 選択範囲が単一のコンテナ内にある場合
+            if (startContainer === endContainer) {
+                if (startContainer.nodeType === 3) {
+                    // テキストノードの場合、親要素を取得
+                    element = startContainer.parentElement;
+                } else {
+                    element = startContainer;
+                }
+            } else {
+                // 複数のコンテナにまたがる場合、共通祖先を使用
+                const container = range.commonAncestorContainer;
+                element = container.nodeType === 3 ? container.parentElement : container;
+            }
+
+            // より具体的なリーフ要素を探す
+            // 要素内のテキストが選択テキストと完全一致する子要素があればそれを使う
+            if (element.children.length > 0) {
+                for (const child of element.children) {
+                    if (child.textContent.trim() === text) {
+                        element = child;
+                        break;
+                    }
+                }
+            }
 
             // セレクタを生成
             let selector = element.tagName.toLowerCase();
@@ -861,14 +889,42 @@ document.addEventListener('mouseup', function() {
         const text = selection.toString().trim();
         if (text && text.length > 0) {
             const range = selection.getRangeAt(0);
-            const container = range.commonAncestorContainer;
-            const element = container.nodeType === 3 ? container.parentElement : container;
-            
+
+            // 選択範囲の最も具体的な要素を特定
+            let element;
+            const startContainer = range.startContainer;
+            const endContainer = range.endContainer;
+
+            // 選択範囲が単一のコンテナ内にある場合
+            if (startContainer === endContainer) {
+                if (startContainer.nodeType === 3) {
+                    // テキストノードの場合、親要素を取得
+                    element = startContainer.parentElement;
+                } else {
+                    element = startContainer;
+                }
+            } else {
+                // 複数のコンテナにまたがる場合、共通祖先を使用
+                const container = range.commonAncestorContainer;
+                element = container.nodeType === 3 ? container.parentElement : container;
+            }
+
+            // より具体的なリーフ要素を探す
+            // 要素内のテキストが選択テキストと完全一致する子要素があればそれを使う
+            if (element.children.length > 0) {
+                for (const child of element.children) {
+                    if (child.textContent.trim() === text) {
+                        element = child;
+                        break;
+                    }
+                }
+            }
+
             // セレクタを生成
             let selector = element.tagName.toLowerCase();
             if (element.id) selector += '#' + element.id;
             if (element.className) selector += '.' + element.className.split(' ').join('.');
-            
+
             window.parent.postMessage({
                 type: 'text-selected',
                 text: text,
@@ -877,7 +933,7 @@ document.addEventListener('mouseup', function() {
                 id: element.id,
                 selector: selector
             }, '*');
-            
+
             console.log('[IFRAME] Selection sent to parent:', text);
         }
     }, 10);
