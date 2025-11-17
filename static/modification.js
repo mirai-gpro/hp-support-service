@@ -148,14 +148,65 @@ class ModificationManager {
                     break;
 
                 case 'delete':
-                    // 要素を削除（フェードアウトアニメーション付き）
-                    element.style.transition = 'opacity 0.3s';
-                    element.style.opacity = '0';
-                    setTimeout(() => {
-                        if (element.parentNode) {
-                            element.parentNode.removeChild(element);
+                    // Range情報がある場合は、選択範囲だけを削除
+                    if (modificationObj.rangeInfo && modificationObj.rangeInfo.startContainerPath) {
+                        // 複数要素にまたがる選択の場合は拒否
+                        if (modificationObj.rangeInfo.spansMultipleElements) {
+                            console.warn('[ModificationManager] 複数要素にまたがる削除は未対応');
+                            return {
+                                success: false,
+                                message: '選択範囲が複数の要素にまたがっています。削除したい部分を個別に選択して削除してください。'
+                            };
                         }
-                    }, 300);
+
+                        console.log('[ModificationManager] Range APIで選択範囲を削除:', modificationObj.rangeInfo);
+
+                        try {
+                            // パスからノードを復元
+                            const startNode = this.getNodeFromPath(iframeDoc, modificationObj.rangeInfo.startContainerPath);
+                            const endNode = this.getNodeFromPath(iframeDoc, modificationObj.rangeInfo.endContainerPath);
+
+                            if (!startNode || !endNode) {
+                                console.error('[ModificationManager] ノードの復元に失敗');
+                                throw new Error('ノードの復元に失敗');
+                            }
+
+                            // Rangeを再構築
+                            const iframeWindow = iframe.contentWindow;
+                            const range = iframeWindow.document.createRange();
+                            range.setStart(startNode, modificationObj.rangeInfo.startOffset);
+                            range.setEnd(endNode, modificationObj.rangeInfo.endOffset);
+
+                            // 削除前の内容を保存（Undo用）
+                            const deletedContent = range.cloneContents();
+                            const tempDiv = iframeDoc.createElement('div');
+                            tempDiv.appendChild(deletedContent);
+                            modificationObj.deletedHtml = tempDiv.innerHTML;
+
+                            // 選択範囲を削除
+                            range.deleteContents();
+                            console.log('[ModificationManager] Range削除完了');
+                        } catch (error) {
+                            console.error('[ModificationManager] Range削除エラー:', error);
+                            // フォールバック: 要素全体を削除
+                            element.style.transition = 'opacity 0.3s';
+                            element.style.opacity = '0';
+                            setTimeout(() => {
+                                if (element.parentNode) {
+                                    element.parentNode.removeChild(element);
+                                }
+                            }, 300);
+                        }
+                    } else {
+                        // Range情報がない場合は要素全体を削除（フェードアウトアニメーション付き）
+                        element.style.transition = 'opacity 0.3s';
+                        element.style.opacity = '0';
+                        setTimeout(() => {
+                            if (element.parentNode) {
+                                element.parentNode.removeChild(element);
+                            }
+                        }, 300);
+                    }
                     break;
 
                 default:
@@ -527,6 +578,30 @@ class ModificationManager {
 
     generateId() {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+
+    // パスからノードを復元するヘルパー関数
+    getNodeFromPath(doc, path) {
+        let node = doc.body;
+        for (const step of path) {
+            if (!node) return null;
+
+            let index = 0;
+            let child = node.firstChild;
+            while (child) {
+                if (child.nodeType === step.nodeType && child.nodeName === step.nodeName) {
+                    if (index === step.index) {
+                        node = child;
+                        break;
+                    }
+                    index++;
+                }
+                child = child.nextSibling;
+            }
+
+            if (!child) return null;
+        }
+        return node;
     }
 
     undoLastModification() {

@@ -284,7 +284,8 @@ document.addEventListener('mouseup', function() {
                 startOffset: range.startOffset,
                 endOffset: range.endOffset,
                 startContainerPath: getNodePath(range.startContainer),
-                endContainerPath: getNodePath(range.endContainer)
+                endContainerPath: getNodePath(range.endContainer),
+                spansMultipleElements: startContainer !== endContainer
             };
 
             window.parent.postMessage({
@@ -983,7 +984,8 @@ document.addEventListener('mouseup', function() {
                 startOffset: range.startOffset,
                 endOffset: range.endOffset,
                 startContainerPath: getNodePath(range.startContainer),
-                endContainerPath: getNodePath(range.endContainer)
+                endContainerPath: getNodePath(range.endContainer),
+                spansMultipleElements: startContainer !== endContainer
             };
 
             window.parent.postMessage({
