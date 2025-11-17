@@ -214,6 +214,28 @@ def inject_scripts_to_html(content):
         # 選択検知スクリプトを注入(既にない場合のみ)
         selection_script = """
 <script>
+// ノードのXPathを取得するヘルパー関数
+function getNodePath(node) {
+    const path = [];
+    while (node && node !== document.body) {
+        let index = 0;
+        let sibling = node.previousSibling;
+        while (sibling) {
+            if (sibling.nodeType === node.nodeType) {
+                index++;
+            }
+            sibling = sibling.previousSibling;
+        }
+        path.unshift({
+            nodeType: node.nodeType,
+            nodeName: node.nodeName,
+            index: index
+        });
+        node = node.parentNode;
+    }
+    return path;
+}
+
 // 親ウィンドウに選択情報を送信
 document.addEventListener('mouseup', function() {
     setTimeout(function() {
@@ -257,13 +279,22 @@ document.addEventListener('mouseup', function() {
             if (element.id) selector += '#' + element.id;
             if (element.className) selector += '.' + element.className.split(' ').join('.');
 
+            // Range情報を保存（テキスト部分削除用）
+            const rangeInfo = {
+                startOffset: range.startOffset,
+                endOffset: range.endOffset,
+                startContainerPath: getNodePath(range.startContainer),
+                endContainerPath: getNodePath(range.endContainer)
+            };
+
             window.parent.postMessage({
                 type: 'text-selected',
                 text: text,
                 tagName: element.tagName,
                 className: element.className,
                 id: element.id,
-                selector: selector
+                selector: selector,
+                rangeInfo: rangeInfo
             }, '*');
 
             console.log('[IFRAME] Selection sent to parent:', text);
@@ -882,6 +913,28 @@ def import_site():
             # 選択検知スクリプトを埋め込む
             selection_script = """
 <script>
+// ノードのXPathを取得するヘルパー関数
+function getNodePath(node) {
+    const path = [];
+    while (node && node !== document.body) {
+        let index = 0;
+        let sibling = node.previousSibling;
+        while (sibling) {
+            if (sibling.nodeType === node.nodeType) {
+                index++;
+            }
+            sibling = sibling.previousSibling;
+        }
+        path.unshift({
+            nodeType: node.nodeType,
+            nodeName: node.nodeName,
+            index: index
+        });
+        node = node.parentNode;
+    }
+    return path;
+}
+
 // 親ウィンドウに選択情報を送信
 document.addEventListener('mouseup', function() {
     setTimeout(function() {
@@ -925,13 +978,22 @@ document.addEventListener('mouseup', function() {
             if (element.id) selector += '#' + element.id;
             if (element.className) selector += '.' + element.className.split(' ').join('.');
 
+            // Range情報を保存（テキスト部分削除用）
+            const rangeInfo = {
+                startOffset: range.startOffset,
+                endOffset: range.endOffset,
+                startContainerPath: getNodePath(range.startContainer),
+                endContainerPath: getNodePath(range.endContainer)
+            };
+
             window.parent.postMessage({
                 type: 'text-selected',
                 text: text,
                 tagName: element.tagName,
                 className: element.className,
                 id: element.id,
-                selector: selector
+                selector: selector,
+                rangeInfo: rangeInfo
             }, '*');
 
             console.log('[IFRAME] Selection sent to parent:', text);
