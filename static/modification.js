@@ -111,14 +111,58 @@ class ModificationManager {
                     break;
 
                 case 'delete':
-                    // deleteTextが指定されている場合は、テキストの一部のみ削除
+                    console.log('[ModificationManager] 削除処理開始 - markId:', modificationObj.markId);
+
+                    // パターンB: markタグを探してプレースホルダーに置き換え
+                    if (modificationObj.markId) {
+                        const markElement = element.querySelector(`mark[data-delete-target="${modificationObj.markId}"]`);
+
+                        if (markElement) {
+                            console.log('[ModificationManager] markタグ発見:', markElement.textContent);
+
+                            // 削除内容を保存
+                            const deletedContent = markElement.innerHTML;
+                            const parentElement = markElement.parentNode;
+
+                            // プレースホルダーを作成
+                            const placeholderId = 'undo-' + Date.now();
+                            const placeholder = iframeDoc.createElement('span');
+                            placeholder.setAttribute('data-undo-marker', placeholderId);
+                            placeholder.style.display = 'none';  // 非表示
+
+                            // markタグをプレースホルダーに置き換え
+                            parentElement.replaceChild(placeholder, markElement);
+                            console.log('[ModificationManager] ✅ markタグをプレースホルダーに置き換え完了');
+
+                            // 履歴に保存（後でundoで使う）
+                            this.recordModification({
+                                type: 'immediate',
+                                userInput: modificationObj.description || '削除',
+                                elementSelector: modificationObj.selector,
+                                selectedText: deletedContent,
+                                originalHtml: originalHtml,
+                                modifiedHtml: element.outerHTML,
+                                modificationType: 'delete',
+                                deletedContent: deletedContent,
+                                placeholderId: placeholderId,
+                                status: 'applied'
+                            });
+
+                            console.log('[ModificationManager] ✅ 削除完了 - プレースホルダーID:', placeholderId);
+                            return { success: true, message: '削除しました' };
+                        } else {
+                            console.warn('[ModificationManager] ⚠️ markタグが見つかりません');
+                        }
+                    }
+
+                    // フォールバック: markIdがない場合は従来の方法
                     if (modificationObj.deleteText) {
                         const currentText = element.textContent;
                         const newText = currentText.replace(modificationObj.deleteText, '');
                         element.textContent = newText.trim();
-                        console.log('[ModificationManager] テキスト部分削除:', modificationObj.deleteText);
+                        console.log('[ModificationManager] テキスト部分削除（フォールバック）:', modificationObj.deleteText);
                     } else {
-                        // 要素全体を削除（フェードアウトアニメーション付き）
+                        // 要素全体を削除
                         element.style.transition = 'opacity 0.3s';
                         element.style.opacity = '0';
                         setTimeout(() => {
@@ -493,6 +537,27 @@ class ModificationManager {
         }
 
         try {
+            // パターンB: プレースホルダーから削除内容を復元
+            if (lastMod.modificationType === 'delete' && lastMod.placeholderId && lastMod.deletedContent) {
+                console.log('[ModificationManager] パターンB Undo開始 - プレースホルダーID:', lastMod.placeholderId);
+
+                const placeholder = iframeDoc.querySelector(`[data-undo-marker="${lastMod.placeholderId}"]`);
+
+                if (placeholder) {
+                    console.log('[ModificationManager] プレースホルダー発見');
+
+                    // 削除されたテキストを復元
+                    const textNode = iframeDoc.createRange().createContextualFragment(lastMod.deletedContent);
+                    placeholder.parentNode.replaceChild(textNode, placeholder);
+
+                    console.log('[ModificationManager] ✅ パターンB Undo完了 - テキスト復元:', lastMod.deletedContent);
+                    return { success: true, message: '削除を元に戻しました' };
+                } else {
+                    console.warn('[ModificationManager] ⚠️ プレースホルダーが見つかりません:', lastMod.placeholderId);
+                }
+            }
+
+            // 従来のUndo処理（フォールバック）
             const element = iframeDoc.querySelector(lastMod.elementSelector);
 
             if (!element) {
