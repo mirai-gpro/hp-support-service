@@ -121,14 +121,18 @@ class ModificationManager {
 
                     // パターンB: markタグを探してプレースホルダーに置き換え
                     if (modificationObj.markId) {
-                        const markElement = element.querySelector(`mark[data-delete-target="${modificationObj.markId}"]`);
+                        // iframe全体からmarkIdで検索（親要素のselectorに依存しない）
+                        const markElement = iframeDoc.querySelector(`mark[data-delete-target="${modificationObj.markId}"]`);
 
                         if (markElement) {
-                            console.log('[ModificationManager] markタグ発見:', markElement.textContent);
-
-                            // 削除内容を保存
-                            const deletedContent = markElement.innerHTML;
+                            // 親要素を取得（正確な位置を記録するため）
                             const parentElement = markElement.parentNode;
+                            console.log('[ModificationManager] markタグ発見:', markElement.textContent);
+                            console.log('[ModificationManager] 親要素:', parentElement.tagName, parentElement.className);
+
+                            // 削除内容と親要素のHTMLを保存
+                            const deletedContent = markElement.innerHTML;
+                            const parentOriginalHtml = parentElement.outerHTML;
 
                             // プレースホルダーを作成
                             const placeholderId = 'undo-' + Date.now();
@@ -140,14 +144,19 @@ class ModificationManager {
                             parentElement.replaceChild(placeholder, markElement);
                             console.log('[ModificationManager] ✅ markタグをプレースホルダーに置き換え完了');
 
+                            // 親要素のセレクタを生成（undo用）
+                            let parentSelector = parentElement.tagName.toLowerCase();
+                            if (parentElement.id) parentSelector += '#' + parentElement.id;
+                            if (parentElement.className) parentSelector += '.' + parentElement.className.split(' ').join('.');
+
                             // 履歴に保存（後でundoで使う）
                             this.recordModification({
                                 type: 'immediate',
                                 userInput: modificationObj.description || '削除',
-                                elementSelector: modificationObj.selector,
+                                elementSelector: parentSelector,  // 正確な親要素のセレクタ
                                 selectedText: deletedContent,
-                                originalHtml: originalHtml,
-                                modifiedHtml: element.outerHTML,
+                                originalHtml: parentOriginalHtml,  // 親要素のHTML
+                                modifiedHtml: parentElement.outerHTML,  // 修正後の親要素のHTML
                                 modificationType: 'delete',
                                 deletedContent: deletedContent,
                                 placeholderId: placeholderId,

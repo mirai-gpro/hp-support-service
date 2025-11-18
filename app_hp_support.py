@@ -244,9 +244,16 @@ document.addEventListener('mouseup', function() {
 
                 // 親要素を取得
                 const parentElement = markElement.parentNode;
+                console.log('[IFRAME] parentElement:', parentElement);
+                console.log('[IFRAME] parentElement.tagName:', parentElement.tagName);
+                console.log('[IFRAME] parentElement.className:', parentElement.className);
+                console.log('[IFRAME] parentElement.id:', parentElement.id);
+
                 let selector = parentElement.tagName.toLowerCase();
                 if (parentElement.id) selector += '#' + parentElement.id;
                 if (parentElement.className) selector += '.' + parentElement.className.split(' ').join('.');
+
+                console.log('[IFRAME] Generated selector:', selector);
 
                 window.parent.postMessage({
                     type: 'text-selected',
@@ -893,9 +900,16 @@ document.addEventListener('mouseup', function() {
 
                 // 親要素を取得
                 const parentElement = markElement.parentNode;
+                console.log('[IFRAME] parentElement:', parentElement);
+                console.log('[IFRAME] parentElement.tagName:', parentElement.tagName);
+                console.log('[IFRAME] parentElement.className:', parentElement.className);
+                console.log('[IFRAME] parentElement.id:', parentElement.id);
+
                 let selector = parentElement.tagName.toLowerCase();
                 if (parentElement.id) selector += '#' + parentElement.id;
                 if (parentElement.className) selector += '.' + parentElement.className.split(' ').join('.');
+
+                console.log('[IFRAME] Generated selector:', selector);
 
                 window.parent.postMessage({
                     type: 'text-selected',
