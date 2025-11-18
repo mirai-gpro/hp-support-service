@@ -418,11 +418,11 @@ class ModificationManager {
 
     generateInstructionDocument() {
         console.log('[ModificationManager] 修正指示書生成開始 - 修正件数:', this.modifications.length);
-        
+
         let doc = '# 修正指示書\n\n';
-        doc += `## 対象ページ: ${window.location.pathname}\n`;
-        doc += `## 作成日時: ${new Date().toLocaleString('ja-JP')}\n`;
-        doc += `## 修正件数: ${this.modifications.length}件\n\n`;
+        doc += `対象ページ: ${window.location.pathname}\n`;
+        doc += `作成日時: ${new Date().toLocaleString('ja-JP')}\n`;
+        doc += `修正件数: ${this.modifications.length}件\n\n`;
         doc += '---\n\n';
 
         if (this.modifications.length === 0) {
@@ -433,29 +433,55 @@ class ModificationManager {
 
         this.modifications.forEach((mod, i) => {
             doc += `## 修正 ${i + 1}: ${this.getModificationTitle(mod)}\n\n`;
-            doc += `- **タイプ**: ${mod.type === 'immediate' ? '$2713 即時反映済み' : '$23F3 バッチ処理待ち'}\n`;
-            doc += `- **指示内容**: ${mod.userInput}\n`;
-            doc += `- **実行日時**: ${mod.timestamp.toLocaleString('ja-JP')}\n`;
-            doc += `- **状態**: ${mod.status === 'applied' ? '$2713 適用済み' : '$23F3 保留中'}\n`;
 
+            // 対象要素
             if (mod.elementSelector) {
-                doc += `- **対象要素**: \`${mod.elementSelector}\`\n`;
+                // data-astro-cidなどの内部属性を除去したシンプルなセレクタ
+                const cleanSelector = mod.elementSelector.replace(/\[data-astro-[^\]]+\]/g, '');
+                doc += `- **対象要素**: \`${cleanSelector}\`\n`;
             }
 
+            // 対象テキスト
             if (mod.selectedText) {
-                const displayText = mod.selectedText.length > 100 
-                    ? mod.selectedText.substring(0, 100) + '...' 
+                const displayText = mod.selectedText.length > 50
+                    ? mod.selectedText.substring(0, 50) + '...'
                     : mod.selectedText;
-                doc += `- **選択テキスト**: "${displayText}"\n`;
+                doc += `- **対象テキスト**: "${displayText}"\n`;
             }
 
-            if (mod.originalHtml && mod.modifiedHtml) {
-                doc += `\n### 変更内容\n\n`;
-                doc += `**修正前のHTML:**\n\`\`\`html\n${mod.originalHtml}\n\`\`\`\n\n`;
-                doc += `**修正後のHTML:**\n\`\`\`html\n${mod.modifiedHtml}\n\`\`\`\n\n`;
+            // 変更内容（修正タイプに応じて詳細を記載）
+            doc += `- **変更内容**: `;
+
+            if (mod.modificationType === 'fontSize') {
+                // フォントサイズ変更の場合
+                doc += `フォントサイズを変更\n`;
+                if (mod.userInput) {
+                    doc += `- **実装方法**: ${mod.userInput}に対応するCSS font-sizeプロパティを適用\n`;
+                }
+            } else if (mod.modificationType === 'delete') {
+                // 削除の場合
+                if (mod.deletedContent) {
+                    doc += `テキストを削除\n`;
+                    doc += `- **削除内容**: "${mod.deletedContent}"\n`;
+                    doc += `- **補足**: 周囲のテキストとHTML構造は保持\n`;
+                } else {
+                    doc += `要素全体を削除\n`;
+                }
+            } else if (mod.modificationType === 'text') {
+                // テキスト変更の場合
+                doc += `テキストを変更\n`;
+            } else if (mod.modificationType === 'color') {
+                // 色変更の場合
+                doc += `色を変更\n`;
+            } else if (mod.modificationType === 'style') {
+                // スタイル変更の場合
+                doc += `スタイルを変更\n`;
+            } else {
+                // その他
+                doc += `${mod.userInput}\n`;
             }
 
-            doc += '---\n\n';
+            doc += '\n---\n\n';
         });
 
         console.log('[ModificationManager] 修正指示書生成完了 - 文字数:', doc.length);
