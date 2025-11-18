@@ -56,6 +56,12 @@ class ModificationManager {
         }
         console.log('[ModificationManager] ✅ iframe document取得成功');
 
+        // Undoの場合は、selectorが不要なので先に処理
+        if (modificationObj.type === 'undo') {
+            console.log('[ModificationManager] Undo操作開始');
+            return this.undoLastModification();
+        }
+
         console.log('[ModificationManager] セレクタで要素検索:', modificationObj.selector);
         const element = iframeDoc.querySelector(modificationObj.selector);
         if (!element) {
@@ -173,10 +179,6 @@ class ModificationManager {
                         console.log('[ModificationManager] 要素全体削除');
                     }
                     break;
-
-                case 'undo':
-                    console.log('[ModificationManager] Undo操作開始');
-                    return this.undoLastModification();
 
                 default:
                     console.error('[ModificationManager] 未対応の修正タイプ:', modificationObj.type);

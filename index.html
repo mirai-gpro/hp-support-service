@@ -670,7 +670,8 @@
                         id: event.data.id,
                         selector: event.data.selector,
                         textContent: event.data.text,
-                        selectedText: event.data.text  // Gemini用に明示的に追加
+                        selectedText: event.data.text,  // Gemini用に明示的に追加
+                        markId: event.data.markId  // パターンB用にmarkIdを保存
                     };
                     
                     const selectionTextEl = document.getElementById('selection-text');
