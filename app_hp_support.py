@@ -655,129 +655,43 @@ def chat():
             logger.error(f"[/api/chat] Gemini model initialization error: {model_error}")
             return jsonify({"success": False, "error": f"Model initialization error: {str(model_error)}"}), 500
 
+        # 選択情報からセレクタを取得
+        user_selector = selection.get('selector') if selection else None
+        user_selected_text = selection.get('selectedText') or selection.get('textContent') if selection else None
+
+        logger.info(f"[/api/chat] User selector: {user_selector}")
+        logger.info(f"[/api/chat] User selected text: {user_selected_text}")
+
         # プロンプト構築
         full_prompt = f"""あなたはHTML修正アシスタントです。ユーザーの修正指示を分析し、JSON形式で返答してください。
 
-**重要: 必ず以下のJSON形式のみで返答してください（マークダウンコードブロック不要）**
+**最重要ルール: selectorは必ず以下の値をそのまま使用してください**
+selector = "{user_selector if user_selector else ""}"
 
-返答JSON形式:
+選択されたテキスト = "{user_selected_text if user_selected_text else ""}"
+
+**JSON形式（必ずこの形式で返答）:**
 {{
   "action": "immediate",
-  "response": "ユーザーへの返答メッセージ",
+  "response": "ユーザーへの返答",
   "modification": {{
-    "selector": "選択されたCSSセレクタ",
+    "selector": "{user_selector if user_selector else ""}",
     "type": "修正タイプ",
     "newValue": "新しい値",
-    "deleteText": "削除するテキスト（deleteタイプで選択テキストがある場合のみ）",
-    "description": "修正内容の説明"
+    "deleteText": "削除テキスト（deleteの場合のみ）",
+    "description": "説明"
   }}
 }}
 
-**具体例1: フォントサイズ変更**
-入力: 「文字を20%小さくして」
-選択: selector="h1.title"
-出力:
-{{
-  "action": "immediate",
-  "response": "文字サイズを20%小さくしました",
-  "modification": {{
-    "selector": "h1.title",
-    "type": "fontSize",
-    "newValue": "12.8px",
-    "description": "フォントサイズを16pxから12.8pxに縮小"
-  }}
-}}
+**修正タイプの判定:**
+ユーザーメッセージ: {message}
 
-**具体例2: 部分テキスト削除**
-入力: 「削除して」
-選択: selector="p.intro", テキスト="Instagram → (仮称)"
-出力:
-{{
-  "action": "immediate",
-  "response": "テキストを削除しました",
-  "modification": {{
-    "selector": "p.intro",
-    "type": "delete",
-    "deleteText": "Instagram → (仮称)",
-    "newValue": "",
-    "description": "選択されたテキスト部分を削除"
-  }}
-}}
+1. フォントサイズ変更: "20%小さく" → type="fontSize", newValue="12.8px"
+2. テキスト削除: "削除" → type="delete", deleteText="{user_selected_text if user_selected_text else ""}"
+3. テキスト変更: "〜に修正" → type="text", newValue="新しいテキスト"
+4. 元に戻す: "元に戻す" → type="undo"
 
-**具体例2-2: 要素全体削除（選択テキストがない場合）**
-入力: 「この段落を削除して」
-選択: selector="p.intro"
-出力:
-{{
-  "action": "immediate",
-  "response": "要素全体を削除しました",
-  "modification": {{
-    "selector": "p.intro",
-    "type": "delete",
-    "newValue": "",
-    "description": "要素全体を削除"
-  }}
-}}
-
-**具体例3: テキスト変更**
-入力: 「健康保険組合に修正して」
-選択: selector="span.org-name", テキスト="さくら労働組合"
-出力:
-{{
-  "action": "immediate",
-  "response": "テキストを修正しました",
-  "modification": {{
-    "selector": "span.org-name",
-    "type": "text",
-    "newValue": "健康保険組合",
-    "description": "テキストを「さくら労働組合」から「健康保険組合」に変更"
-  }}
-}}
-
-**具体例4: 元に戻す（undo）**
-入力: 「元に戻して」または「直前の修正を元に戻して」
-選択: なし
-出力:
-{{
-  "action": "immediate",
-  "response": "直前の変更を元に戻しました",
-  "modification": {{
-    "selector": "",
-    "type": "undo",
-    "newValue": "",
-    "description": "直前の修正を元に戻す"
-  }}
-}}
-
-修正タイプ一覧:
-- fontSize: フォントサイズ変更（newValue例: "12.8px", "24px"）
-- text: テキスト内容変更
-- color: 文字色変更（newValue例: "red", "#ff0000"）
-- background: 背景色変更
-- delete: テキスト/要素削除
-  - 選択テキストがある場合: deleteTextパラメータに削除するテキストを指定（部分削除）
-  - 選択テキストがない場合: 要素全体を削除
-- undo: 直前の修正を元に戻す（newValueは""、selectorは不要）
-
-フォントサイズ計算（デフォルト16px基準）:
-- 20%小さく → 16px × 0.8 = 12.8px
-- 50%大きく → 16px × 1.5 = 24px
-
----
-
-選択情報:
-セレクタ: {selection.get('selector') if selection else 'なし'}
-選択テキスト: {selection.get('selectedText') or selection.get('textContent') if selection else 'なし'}
-要素タイプ: {selection.get('tagName') if selection else 'なし'}
-
-ユーザーメッセージ:
-{message}
-
-**重要**:
-- 削除指示の場合、選択テキストがあれば必ず`deleteText`パラメータに選択テキストを指定してください
-- 選択テキストがない場合のみ要素全体を削除してください
-
-上記を分析し、上記の具体例に倣ってJSON形式のみで返答してください。
+上記を分析し、JSON形式のみで返答してください（マークダウン不要）。
 """
 
         try:
