@@ -648,19 +648,33 @@ class ModificationManager {
 
         try {
             // パターンB: プレースホルダーから削除内容を復元
-            if (lastMod.modificationType === 'delete' && lastMod.placeholderId && lastMod.deletedContent) {
+            if ((lastMod.modificationType === 'delete' || lastMod.modificationType === 'delete-image') && lastMod.placeholderId && lastMod.deletedContent) {
                 console.log('[ModificationManager] パターンB Undo開始 - プレースホルダーID:', lastMod.placeholderId);
+                console.log('[ModificationManager] 修正タイプ:', lastMod.modificationType);
 
                 const placeholder = iframeDoc.querySelector(`[data-undo-marker="${lastMod.placeholderId}"]`);
 
                 if (placeholder) {
                     console.log('[ModificationManager] プレースホルダー発見');
 
-                    // 削除されたテキストを復元
-                    const textNode = iframeDoc.createRange().createContextualFragment(lastMod.deletedContent);
-                    placeholder.parentNode.replaceChild(textNode, placeholder);
+                    // 削除されたコンテンツを復元
+                    const restoredContent = iframeDoc.createRange().createContextualFragment(lastMod.deletedContent);
+                    placeholder.parentNode.replaceChild(restoredContent, placeholder);
 
-                    console.log('[ModificationManager] ✅ パターンB Undo完了 - テキスト復元:', lastMod.deletedContent);
+                    console.log('[ModificationManager] ✅ パターンB Undo完了 - コンテンツ復元:', lastMod.deletedContent.substring(0, 100));
+
+                    // 画像削除の場合は枠線をクリア
+                    if (lastMod.modificationType === 'delete-image') {
+                        setTimeout(() => {
+                            const restoredImg = iframeDoc.querySelector(`img[data-selected-image="${lastMod.placeholderId.replace('undo-img-', 'img-')}"]`);
+                            if (restoredImg) {
+                                restoredImg.removeAttribute('data-selected-image');
+                                restoredImg.style.outline = '';
+                                restoredImg.style.outlineOffset = '';
+                            }
+                        }, 100);
+                    }
+
                     return { success: true, message: '削除を元に戻しました' };
                 } else {
                     console.warn('[ModificationManager] ⚠️ プレースホルダーが見つかりません:', lastMod.placeholderId);
