@@ -117,7 +117,58 @@ class ModificationManager {
                     break;
 
                 case 'delete':
-                    console.log('[ModificationManager] 削除処理開始 - markId:', modificationObj.markId);
+                    console.log('[ModificationManager] 削除処理開始 - markId:', modificationObj.markId, 'imageId:', modificationObj.imageId);
+
+                    // 画像削除の場合
+                    if (modificationObj.imageId) {
+                        const imageElement = iframeDoc.querySelector(`img[data-selected-image="${modificationObj.imageId}"]`);
+
+                        if (imageElement) {
+                            console.log('[ModificationManager] 画像発見:', imageElement.src);
+
+                            // 削除前の情報を保存
+                            const imageSrc = imageElement.src;
+                            const imageAlt = imageElement.alt;
+                            const parentElement = imageElement.parentNode;
+                            const parentOriginalHtml = parentElement.outerHTML;
+
+                            // プレースホルダーを作成
+                            const placeholderId = 'undo-img-' + Date.now();
+                            const placeholder = iframeDoc.createElement('span');
+                            placeholder.setAttribute('data-undo-marker', placeholderId);
+                            placeholder.style.display = 'none';
+
+                            // 画像をプレースホルダーに置き換え
+                            parentElement.replaceChild(placeholder, imageElement);
+                            console.log('[ModificationManager] ✅ 画像をプレースホルダーに置き換え完了');
+
+                            // 親要素のセレクタを生成
+                            let parentSelector = parentElement.tagName.toLowerCase();
+                            if (parentElement.id) parentSelector += '#' + parentElement.id;
+                            if (parentElement.className) parentSelector += '.' + parentElement.className.split(' ').join('.');
+
+                            // 履歴に保存
+                            this.recordModification({
+                                type: 'immediate',
+                                userInput: modificationObj.description || '画像削除',
+                                elementSelector: parentSelector,
+                                selectedText: `[画像: ${imageAlt || imageSrc}]`,
+                                originalHtml: parentOriginalHtml,
+                                modifiedHtml: parentElement.outerHTML,
+                                modificationType: 'delete-image',
+                                deletedContent: imageElement.outerHTML,
+                                placeholderId: placeholderId,
+                                imageSrc: imageSrc,
+                                imageAlt: imageAlt,
+                                status: 'applied'
+                            });
+
+                            console.log('[ModificationManager] ✅ 画像削除完了 - プレースホルダーID:', placeholderId);
+                            return { success: true, message: '画像を削除しました' };
+                        } else {
+                            console.warn('[ModificationManager] ⚠️ 画像が見つかりません');
+                        }
+                    }
 
                     // パターンB: markタグを探してプレースホルダーに置き換え
                     if (modificationObj.markId) {
@@ -467,6 +518,26 @@ class ModificationManager {
                 } else {
                     doc += `要素全体を削除\n`;
                 }
+            } else if (mod.modificationType === 'delete-image') {
+                // 画像削除の場合
+                doc += `画像を削除\n`;
+                if (mod.imageSrc) {
+                    doc += `- **画像URL**: ${mod.imageSrc}\n`;
+                }
+                if (mod.imageAlt) {
+                    doc += `- **代替テキスト**: "${mod.imageAlt}"\n`;
+                }
+                doc += `- **補足**: 周囲のHTML構造は保持\n`;
+            } else if (mod.modificationType === 'replace-image') {
+                // 画像差し替えの場合（後処理）
+                doc += `画像を差し替え（後処理）\n`;
+                if (mod.imageSrc) {
+                    doc += `- **元の画像URL**: ${mod.imageSrc}\n`;
+                }
+                if (mod.imageAlt) {
+                    doc += `- **代替テキスト**: "${mod.imageAlt}"\n`;
+                }
+                doc += `- **実装方法**: 新しい画像ファイルを用意し、src属性を更新してください\n`;
             } else if (mod.modificationType === 'text') {
                 // テキスト変更の場合
                 doc += `テキストを変更\n`;
@@ -490,6 +561,8 @@ class ModificationManager {
 
     getModificationTitle(mod) {
         if (mod.type === 'immediate') {
+            if (mod.modificationType === 'delete-image') return '画像削除';
+            if (mod.modificationType === 'replace-image') return '画像差し替え';
             if (mod.userInput.match(/\d+%(大きく|小さく)/)) {
                 const match = mod.userInput.match(/(\d+)%(大きく|小さく)/);
                 return `文字サイズを${match[1]}%${match[2]}`;
@@ -498,7 +571,7 @@ class ModificationManager {
             if (mod.userInput.includes('小さく')) return 'サイズを小さく';
             if (mod.userInput.includes('短く') || mod.userInput.includes('要約')) return 'テキスト要約';
             if (mod.userInput.includes('色')) return '色変更';
-            if (mod.userInput.includes('削除') || mod.userInput.includes('消して') || 
+            if (mod.userInput.includes('削除') || mod.userInput.includes('消して') ||
                 mod.userInput.includes('取り除いて')) return 'テキスト削除';
             return '軽微な修正';
         }

@@ -288,6 +288,60 @@ document.addEventListener('mouseup', function() {
         }
     }, 10);
 });
+
+// 画像クリック検知（選択）
+let selectedImage = null;
+document.addEventListener('click', function(e) {
+    if (e.target.tagName === 'IMG') {
+        e.preventDefault();
+
+        console.log('[IFRAME] Image clicked:', e.target.src);
+
+        // 既存のmark選択をクリア
+        const existingMarks = document.querySelectorAll('mark[data-delete-target]');
+        existingMarks.forEach(mark => {
+            const parent = mark.parentNode;
+            while (mark.firstChild) {
+                parent.insertBefore(mark.firstChild, mark);
+            }
+            parent.removeChild(mark);
+        });
+
+        // 既存の画像選択をクリア
+        if (selectedImage) {
+            selectedImage.style.outline = '';
+            selectedImage.style.outlineOffset = '';
+        }
+
+        // 画像を選択状態にする
+        selectedImage = e.target;
+        selectedImage.style.outline = '3px solid #ffc107';
+        selectedImage.style.outlineOffset = '2px';
+
+        // セレクタを生成
+        let selector = 'img';
+        if (selectedImage.id) selector += '#' + selectedImage.id;
+        if (selectedImage.className) selector += '.' + selectedImage.className.split(' ').join('.');
+
+        // 画像IDを生成
+        const imageId = 'img-' + Date.now();
+        selectedImage.setAttribute('data-selected-image', imageId);
+
+        // 親ウィンドウに通知
+        window.parent.postMessage({
+            type: 'image-selected',
+            tagName: 'IMG',
+            selector: selector,
+            src: selectedImage.src,
+            alt: selectedImage.alt || '',
+            width: selectedImage.width,
+            height: selectedImage.height,
+            imageId: imageId
+        }, '*');
+
+        console.log('[IFRAME] Image selection sent to parent:', selector, imageId);
+    }
+});
 </script>
 """
 
@@ -701,21 +755,27 @@ def chat():
             logger.error(f"[/api/chat] Gemini model initialization error: {model_error}")
             return jsonify({"success": False, "error": f"Model initialization error: {str(model_error)}"}), 500
 
-        # 選択情報からセレクタとmarkIdを取得
+        # 選択情報からセレクタとmarkId/imageIdを取得
         user_selector = selection.get('selector') if selection else None
         user_selected_text = selection.get('selectedText') or selection.get('textContent') if selection else None
         user_mark_id = selection.get('markId') if selection else None
+        user_image_id = selection.get('imageId') if selection else None
+        is_image = selection.get('isImage') if selection else False
 
         logger.info(f"[/api/chat] User selector: {user_selector}")
         logger.info(f"[/api/chat] User selected text: {user_selected_text}")
         logger.info(f"[/api/chat] User markId: {user_mark_id}")
+        logger.info(f"[/api/chat] User imageId: {user_image_id}")
+        logger.info(f"[/api/chat] Is image: {is_image}")
 
         # プロンプト構築
         full_prompt = f"""あなたはHTML修正アシスタントです。ユーザーの修正指示を分析し、JSON形式で返答してください。
 
-**最重要ルール: selector と markId は必ず以下の値をそのまま使用してください**
+**最重要ルール: 以下の値をそのまま使用してください**
 selector = "{user_selector if user_selector else ""}"
 markId = "{user_mark_id if user_mark_id else ""}"
+imageId = "{user_image_id if user_image_id else ""}"
+is_image = {is_image}
 
 選択されたテキスト = "{user_selected_text if user_selected_text else ""}"
 
@@ -726,6 +786,7 @@ markId = "{user_mark_id if user_mark_id else ""}"
   "modification": {{
     "selector": "{user_selector if user_selector else ""}",
     "markId": "{user_mark_id if user_mark_id else ""}",
+    "imageId": "{user_image_id if user_image_id else ""}",
     "type": "修正タイプ",
     "newValue": "新しい値",
     "deleteText": "削除テキスト（deleteの場合のみ）",
@@ -738,8 +799,9 @@ markId = "{user_mark_id if user_mark_id else ""}"
 
 1. フォントサイズ変更: "20%小さく" → type="fontSize", newValue="12.8px"
 2. テキスト削除: "削除" → type="delete", markIdを必ず含める
-3. テキスト変更: "〜に修正" → type="text", newValue="新しいテキスト"
-4. 元に戻す: "元に戻す" → type="undo"
+3. 画像削除: 画像選択時に"削除" → type="delete", imageIdを必ず含める
+4. テキスト変更: "〜に修正" → type="text", newValue="新しいテキスト"
+5. 元に戻す: "元に戻す" → type="undo"
 
 上記を分析し、JSON形式のみで返答してください（マークダウン不要）。
 """
@@ -943,6 +1005,60 @@ document.addEventListener('mouseup', function() {
             }
         }
     }, 10);
+});
+
+// 画像クリック検知（選択）
+let selectedImage = null;
+document.addEventListener('click', function(e) {
+    if (e.target.tagName === 'IMG') {
+        e.preventDefault();
+
+        console.log('[IFRAME] Image clicked:', e.target.src);
+
+        // 既存のmark選択をクリア
+        const existingMarks = document.querySelectorAll('mark[data-delete-target]');
+        existingMarks.forEach(mark => {
+            const parent = mark.parentNode;
+            while (mark.firstChild) {
+                parent.insertBefore(mark.firstChild, mark);
+            }
+            parent.removeChild(mark);
+        });
+
+        // 既存の画像選択をクリア
+        if (selectedImage) {
+            selectedImage.style.outline = '';
+            selectedImage.style.outlineOffset = '';
+        }
+
+        // 画像を選択状態にする
+        selectedImage = e.target;
+        selectedImage.style.outline = '3px solid #ffc107';
+        selectedImage.style.outlineOffset = '2px';
+
+        // セレクタを生成
+        let selector = 'img';
+        if (selectedImage.id) selector += '#' + selectedImage.id;
+        if (selectedImage.className) selector += '.' + selectedImage.className.split(' ').join('.');
+
+        // 画像IDを生成
+        const imageId = 'img-' + Date.now();
+        selectedImage.setAttribute('data-selected-image', imageId);
+
+        // 親ウィンドウに通知
+        window.parent.postMessage({
+            type: 'image-selected',
+            tagName: 'IMG',
+            selector: selector,
+            src: selectedImage.src,
+            alt: selectedImage.alt || '',
+            width: selectedImage.width,
+            height: selectedImage.height,
+            imageId: imageId
+        }, '*');
+
+        console.log('[IFRAME] Image selection sent to parent:', selector, imageId);
+    }
 });
 </script>
 """
