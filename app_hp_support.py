@@ -214,31 +214,70 @@ def inject_scripts_to_html(content):
         # 選択検知スクリプトを注入(既にない場合のみ)
         selection_script = """
 <script>
-// 親ウィンドウに選択情報を送信
+// 親ウィンドウに選択情報を送信（markタグで範囲をマーク）
 document.addEventListener('mouseup', function() {
     setTimeout(function() {
         const selection = window.getSelection();
         const text = selection.toString().trim();
         if (text && text.length > 0) {
-            const range = selection.getRangeAt(0);
-            const container = range.commonAncestorContainer;
-            const element = container.nodeType === 3 ? container.parentElement : container;
+            try {
+                const range = selection.getRangeAt(0);
 
-            // セレクタを生成
-            let selector = element.tagName.toLowerCase();
-            if (element.id) selector += '#' + element.id;
-            if (element.className) selector += '.' + element.className.split(' ').join('.');
+                // 既存のmarkタグをクリーンアップ
+                const existingMarks = document.querySelectorAll('mark[data-delete-target]');
+                existingMarks.forEach(mark => {
+                    const parent = mark.parentNode;
+                    while (mark.firstChild) {
+                        parent.insertBefore(mark.firstChild, mark);
+                    }
+                    parent.removeChild(mark);
+                });
 
-            window.parent.postMessage({
-                type: 'text-selected',
-                text: text,
-                tagName: element.tagName,
-                className: element.className,
-                id: element.id,
-                selector: selector
-            }, '*');
+                // 選択範囲をmarkタグで囲む
+                const markElement = document.createElement('mark');
+                const markId = 'mark-' + Date.now();
+                markElement.setAttribute('data-delete-target', markId);
+                markElement.style.backgroundColor = '#fff3cd';
+                markElement.style.padding = '2px 0';
 
-            console.log('[IFRAME] Selection sent to parent:', text);
+                range.surroundContents(markElement);
+
+                // 親要素を取得
+                const parentElement = markElement.parentNode;
+                let selector = parentElement.tagName.toLowerCase();
+                if (parentElement.id) selector += '#' + parentElement.id;
+                if (parentElement.className) selector += '.' + parentElement.className.split(' ').join('.');
+
+                window.parent.postMessage({
+                    type: 'text-selected',
+                    text: text,
+                    tagName: parentElement.tagName,
+                    className: parentElement.className,
+                    id: parentElement.id,
+                    selector: selector,
+                    markId: markId
+                }, '*');
+
+                console.log('[IFRAME] Selection marked and sent to parent:', text, 'markId:', markId);
+            } catch (e) {
+                console.error('[IFRAME] Failed to mark selection:', e);
+                // フォールバック: markタグなしで送信
+                const container = range.commonAncestorContainer;
+                const element = container.nodeType === 3 ? container.parentElement : container;
+                let selector = element.tagName.toLowerCase();
+                if (element.id) selector += '#' + element.id;
+                if (element.className) selector += '.' + element.className.split(' ').join('.');
+
+                window.parent.postMessage({
+                    type: 'text-selected',
+                    text: text,
+                    tagName: element.tagName,
+                    className: element.className,
+                    id: element.id,
+                    selector: selector,
+                    markId: null
+                }, '*');
+            }
         }
     }, 10);
 });
@@ -655,18 +694,21 @@ def chat():
             logger.error(f"[/api/chat] Gemini model initialization error: {model_error}")
             return jsonify({"success": False, "error": f"Model initialization error: {str(model_error)}"}), 500
 
-        # 選択情報からセレクタを取得
+        # 選択情報からセレクタとmarkIdを取得
         user_selector = selection.get('selector') if selection else None
         user_selected_text = selection.get('selectedText') or selection.get('textContent') if selection else None
+        user_mark_id = selection.get('markId') if selection else None
 
         logger.info(f"[/api/chat] User selector: {user_selector}")
         logger.info(f"[/api/chat] User selected text: {user_selected_text}")
+        logger.info(f"[/api/chat] User markId: {user_mark_id}")
 
         # プロンプト構築
         full_prompt = f"""あなたはHTML修正アシスタントです。ユーザーの修正指示を分析し、JSON形式で返答してください。
 
-**最重要ルール: selectorは必ず以下の値をそのまま使用してください**
+**最重要ルール: selector と markId は必ず以下の値をそのまま使用してください**
 selector = "{user_selector if user_selector else ""}"
+markId = "{user_mark_id if user_mark_id else ""}"
 
 選択されたテキスト = "{user_selected_text if user_selected_text else ""}"
 
@@ -676,6 +718,7 @@ selector = "{user_selector if user_selector else ""}"
   "response": "ユーザーへの返答",
   "modification": {{
     "selector": "{user_selector if user_selector else ""}",
+    "markId": "{user_mark_id if user_mark_id else ""}",
     "type": "修正タイプ",
     "newValue": "新しい値",
     "deleteText": "削除テキスト（deleteの場合のみ）",
@@ -687,7 +730,7 @@ selector = "{user_selector if user_selector else ""}"
 ユーザーメッセージ: {message}
 
 1. フォントサイズ変更: "20%小さく" → type="fontSize", newValue="12.8px"
-2. テキスト削除: "削除" → type="delete", deleteText="{user_selected_text if user_selected_text else ""}"
+2. テキスト削除: "削除" → type="delete", markIdを必ず含める
 3. テキスト変更: "〜に修正" → type="text", newValue="新しいテキスト"
 4. 元に戻す: "元に戻す" → type="undo"
 
@@ -820,31 +863,70 @@ def import_site():
             # 選択検知スクリプトを埋め込む
             selection_script = """
 <script>
-// 親ウィンドウに選択情報を送信
+// 親ウィンドウに選択情報を送信（markタグで範囲をマーク）
 document.addEventListener('mouseup', function() {
     setTimeout(function() {
         const selection = window.getSelection();
         const text = selection.toString().trim();
         if (text && text.length > 0) {
-            const range = selection.getRangeAt(0);
-            const container = range.commonAncestorContainer;
-            const element = container.nodeType === 3 ? container.parentElement : container;
-            
-            // セレクタを生成
-            let selector = element.tagName.toLowerCase();
-            if (element.id) selector += '#' + element.id;
-            if (element.className) selector += '.' + element.className.split(' ').join('.');
-            
-            window.parent.postMessage({
-                type: 'text-selected',
-                text: text,
-                tagName: element.tagName,
-                className: element.className,
-                id: element.id,
-                selector: selector
-            }, '*');
-            
-            console.log('[IFRAME] Selection sent to parent:', text);
+            try {
+                const range = selection.getRangeAt(0);
+
+                // 既存のmarkタグをクリーンアップ
+                const existingMarks = document.querySelectorAll('mark[data-delete-target]');
+                existingMarks.forEach(mark => {
+                    const parent = mark.parentNode;
+                    while (mark.firstChild) {
+                        parent.insertBefore(mark.firstChild, mark);
+                    }
+                    parent.removeChild(mark);
+                });
+
+                // 選択範囲をmarkタグで囲む
+                const markElement = document.createElement('mark');
+                const markId = 'mark-' + Date.now();
+                markElement.setAttribute('data-delete-target', markId);
+                markElement.style.backgroundColor = '#fff3cd';
+                markElement.style.padding = '2px 0';
+
+                range.surroundContents(markElement);
+
+                // 親要素を取得
+                const parentElement = markElement.parentNode;
+                let selector = parentElement.tagName.toLowerCase();
+                if (parentElement.id) selector += '#' + parentElement.id;
+                if (parentElement.className) selector += '.' + parentElement.className.split(' ').join('.');
+
+                window.parent.postMessage({
+                    type: 'text-selected',
+                    text: text,
+                    tagName: parentElement.tagName,
+                    className: parentElement.className,
+                    id: parentElement.id,
+                    selector: selector,
+                    markId: markId
+                }, '*');
+
+                console.log('[IFRAME] Selection marked and sent to parent:', text, 'markId:', markId);
+            } catch (e) {
+                console.error('[IFRAME] Failed to mark selection:', e);
+                // フォールバック: markタグなしで送信
+                const container = range.commonAncestorContainer;
+                const element = container.nodeType === 3 ? container.parentElement : container;
+                let selector = element.tagName.toLowerCase();
+                if (element.id) selector += '#' + element.id;
+                if (element.className) selector += '.' + element.className.split(' ').join('.');
+
+                window.parent.postMessage({
+                    type: 'text-selected',
+                    text: text,
+                    tagName: element.tagName,
+                    className: element.className,
+                    id: element.id,
+                    selector: selector,
+                    markId: null
+                }, '*');
+            }
         }
     }, 10);
 });
