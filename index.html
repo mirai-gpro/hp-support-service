@@ -343,7 +343,7 @@
             border: none;
         }
     </style>
-    <script src="/static/modification.js"></script>
+    <script src="/static/modification.js?v=428941c"></script>
 </head>
 <body>
     <div class="container">
@@ -661,8 +661,8 @@
         function setupPostMessageListener() {
             window.addEventListener('message', (event) => {
                 if (event.data.type === 'text-selected') {
-                    console.log('[postMessage] Received selection:', event.data);
-                    
+                    console.log('[postMessage] Received text selection:', event.data);
+
                     selectedText = event.data.text;
                     selectedElement = {
                         tagName: event.data.tagName,
@@ -670,20 +670,48 @@
                         id: event.data.id,
                         selector: event.data.selector,
                         textContent: event.data.text,
-                        selectedText: event.data.text  // Gemini用に明示的に追加
+                        selectedText: event.data.text,  // Gemini用に明示的に追加
+                        markId: event.data.markId  // パターンB用にmarkIdを保存
                     };
-                    
+
                     const selectionTextEl = document.getElementById('selection-text');
                     const selectionInfoEl = document.getElementById('selection-info');
-                    
+
                     if (selectionTextEl && selectionInfoEl) {
-                        selectionTextEl.textContent = event.data.text.length > 50 
-                            ? event.data.text.substring(0, 50) + '...' 
+                        selectionTextEl.textContent = event.data.text.length > 50
+                            ? event.data.text.substring(0, 50) + '...'
                             : event.data.text;
                         selectionInfoEl.classList.add('active');
                     }
-                    
-                    console.log('[postMessage] Selection saved:', selectedText);
+
+                    console.log('[postMessage] Text selection saved:', selectedText);
+                } else if (event.data.type === 'image-selected') {
+                    console.log('[postMessage] Received image selection:', event.data);
+
+                    selectedText = `[画像: ${event.data.alt || event.data.src}]`;
+                    selectedElement = {
+                        tagName: 'IMG',
+                        className: event.data.className,
+                        id: event.data.id,
+                        selector: event.data.selector,
+                        src: event.data.src,
+                        alt: event.data.alt,
+                        width: event.data.width,
+                        height: event.data.height,
+                        imageId: event.data.imageId,
+                        isImage: true  // 画像フラグ
+                    };
+
+                    const selectionTextEl = document.getElementById('selection-text');
+                    const selectionInfoEl = document.getElementById('selection-info');
+
+                    if (selectionTextEl && selectionInfoEl) {
+                        const displayText = event.data.alt || event.data.src;
+                        selectionTextEl.textContent = `画像: ${displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText}`;
+                        selectionInfoEl.classList.add('active');
+                    }
+
+                    console.log('[postMessage] Image selection saved:', event.data.selector);
                 }
             });
             console.log('[postMessage] Listener setup complete');
