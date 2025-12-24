@@ -1,19 +1,32 @@
 # Web Framework
 Flask==3.0.0
 flask-cors==4.0.0
-gunicorn==21.2.0
+flask-socketio==5.3.5
+python-socketio==5.10.0
 
-# Google Cloud Services
-google-generativeai==0.3.2
-google-cloud-storage==2.14.0
-google-cloud-texttospeech==2.16.1
+# Gemini / LLM（正式SDK・検索対応）
+google-genai>=0.3.0
+google-generativeai>=0.8.0
+
+# Google Cloud
+google-cloud-firestore==2.18.0
+google-cloud-storage==2.18.2
+google-cloud-texttospeech>=2.14.0
+google-cloud-speech>=2.21.0
 
 # Document Processing
 python-docx==1.1.0
 beautifulsoup4==4.12.2
 
-# HTTP Client
+# Server
+gunicorn==21.2.0
+
+# HTTP / Utility
+httpx>=0.25.0
 requests==2.31.0
 
-# Data Validation (required by google-generativeai)
-pydantic==2.5.0
+# Data Validation
+pydantic>=2.5.0
+
+# Future use（残していても問題なし：将来用）
+anthropic>=0.25.0
